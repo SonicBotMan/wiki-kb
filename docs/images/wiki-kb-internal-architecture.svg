@@ -1,225 +1,258 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 700" width="960" height="700" font-family="system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 860" width="1200" height="860">
+  <style>
+    text { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace; }
+  </style>
   <defs>
-    <marker id="a-blue" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,3.5 L0,7 Z" fill="#2563eb"/>
+    <!-- Arrow markers -->
+    <marker id="arr-cyan" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#22d3ee"/>
     </marker>
-    <marker id="a-green" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,3.5 L0,7 Z" fill="#059669"/>
+    <marker id="arr-violet" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#a78bfa"/>
     </marker>
-    <marker id="a-orange" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,3.5 L0,7 Z" fill="#ea580c"/>
+    <marker id="arr-emerald" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#34d399"/>
     </marker>
-    <marker id="a-purple" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,3.5 L0,7 Z" fill="#7c3aed"/>
+    <marker id="arr-orange" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#fb923c"/>
     </marker>
+    <marker id="arr-amber" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#fbbf24"/>
+    </marker>
+    <marker id="arr-rose" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#fb7185"/>
+    </marker>
+    <marker id="arr-slate" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#64748b"/>
+    </marker>
+    <!-- Grid pattern -->
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
   </defs>
 
-  <!-- Background -->
-  <rect width="960" height="700" fill="#ffffff"/>
+  <!-- ===== BACKGROUND ===== -->
+  <rect width="1200" height="860" fill="#020617"/>
+  <rect width="1200" height="860" fill="url(#grid)"/>
 
-  <!-- Title -->
-  <text x="40" y="36" font-size="20" font-weight="600" fill="#0f172a">Wiki-KB Internal Architecture</text>
-  <text x="40" y="54" font-size="12" fill="#6b7280">MCP Server Components, Data Flow, and Storage Layout</text>
+  <!-- ===== TITLE BAR ===== -->
+  <rect x="0" y="0" width="1200" height="52" fill="#0a1628"/>
+  <text x="32" y="32" font-size="18" font-weight="700" fill="#ffffff" letter-spacing="0.02em">Wiki-KB Internal Architecture</text>
+  <text x="32" y="46" font-size="10" fill="#64748b" dy="4">MCP Server Components · Data Flow · Storage Layout</text>
+  <line x1="0" y1="52" x2="1200" y2="52" stroke="#22d3ee" stroke-width="1" opacity="0.4"/>
 
-  <!-- ===== TOP: MCP Client Layer ===== -->
-  <rect x="320" y="72" width="320" height="40" rx="20" fill="#f9fafb" stroke="#d1d5db" stroke-width="1.5"/>
-  <text x="480" y="96" text-anchor="middle" font-size="14" fill="#374151" font-weight="500">MCP Client (AI Agent)</text>
+  <!-- ===== MCP CLIENT (top) ===== -->
+  <rect x="460" y="70" width="280" height="44" rx="22" fill="#0c1824" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="600" y="97" text-anchor="middle" font-size="13" font-weight="600" fill="#22d3ee">MCP Client (AI Agent)</text>
+  <text x="600" y="112" text-anchor="middle" font-size="9" fill="#64748b">StreamableHTTP · :8764</text>
 
   <!-- Arrow: Client → Server -->
-  <line x1="480" y1="112" x2="480" y2="142" stroke="#2563eb" stroke-width="2" marker-end="url(#a-blue)"/>
-  <text x="492" y="132" font-size="10" fill="#2563eb">StreamableHTTP</text>
-  <text x="492" y="144" font-size="10" fill="#2563eb">:8764</text>
+  <line x1="600" y1="114" x2="600" y2="158" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arr-cyan)"/>
 
   <!-- ===== MCP SERVER BOX ===== -->
-  <rect x="40" y="148" width="880" height="280" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
-  <rect x="40" y="148" width="880" height="28" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
-  <rect x="40" y="168" width="880" height="8" fill="#dbeafe"/>
-  <text x="60" y="168" font-size="13" fill="#1e40af" font-weight="600">Wiki-KB MCP Server (FastMCP)</text>
-  <text x="830" y="168" font-size="11" fill="#3b82f6">wiki_mcp_server.py</text>
+  <!-- Outer boundary -->
+  <rect x="32" y="166" width="1136" height="310" rx="10" fill="#030d1f" stroke="#334155" stroke-width="1.5"/>
+  <!-- Header strip -->
+  <rect x="32" y="166" width="1136" height="34" rx="10" fill="#0c1824" stroke="#334155" stroke-width="1.5"/>
+  <rect x="32" y="192" width="1136" height="8" fill="#0c1824"/>
+  <line x1="32" y1="200" x2="1168" y2="200" stroke="#1e3a5f" stroke-width="1" opacity="0.6"/>
+  <text x="52" y="189" font-size="13" font-weight="600" fill="#22d3ee">Wiki-KB MCP Server</text>
+  <text x="52" y="203" font-size="10" fill="#475569">FastMCP · 11 Tools · Path traversal protection · 24h session</text>
 
-  <!-- ===== 3 Tool Groups inside MCP Server ===== -->
+  <!-- === 3 TOOL GROUP BOXES === -->
 
-  <!-- Wiki CRUD Tools -->
-  <g id="tools-wiki">
-    <rect x="60" y="192" width="260" height="220" rx="6" fill="#ffffff" stroke="#93c5fd" stroke-width="1"/>
-    <text x="80" y="212" font-size="11" font-weight="600" fill="#1e40af">Wiki Operations (6 tools)</text>
+  <!-- GROUP 1: Wiki Operations (violet) -->
+  <rect x="52" y="218" width="340" height="248" rx="8" fill="#0f172a" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="72" y="242" font-size="11" font-weight="600" fill="#a78bfa">Wiki Operations</text>
+  <text x="218" y="242" text-anchor="end" font-size="9" fill="#475569">6 tools</text>
 
-    <rect x="76" y="224" width="228" height="26" rx="4" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
-    <text x="190" y="241" text-anchor="middle" font-size="11" fill="#374151">wiki_search(query, type)</text>
+  <!-- Tool items: read (slate), write (emerald) -->
+  <!-- wiki_search -->
+  <rect x="68" y="254" width="312" height="30" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="224" y="273" text-anchor="middle" font-size="10" fill="#94a3b8">wiki_search(query, type)</text>
 
-    <rect x="76" y="258" width="228" height="26" rx="4" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
-    <text x="190" y="275" text-anchor="middle" font-size="11" fill="#374151">wiki_get(page_id)</text>
+  <!-- wiki_get -->
+  <rect x="68" y="292" width="312" height="30" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="224" y="311" text-anchor="middle" font-size="10" fill="#94a3b8">wiki_get(page_id)</text>
 
-    <rect x="76" y="292" width="228" height="26" rx="4" fill="#f0fdf4" stroke="#86efac" stroke-width="1"/>
-    <text x="190" y="309" text-anchor="middle" font-size="11" fill="#166534" font-weight="500">wiki_create(name, type, ...)</text>
+  <!-- wiki_create (write) -->
+  <rect x="68" y="330" width="312" height="30" rx="4" fill="#052e16" stroke="#34d399" stroke-width="1.5"/>
+  <text x="224" y="349" text-anchor="middle" font-size="10" fill="#34d399" font-weight="600">wiki_create(name, type, ...)</text>
 
-    <rect x="76" y="326" width="228" height="26" rx="4" fill="#f0fdf4" stroke="#86efac" stroke-width="1"/>
-    <text x="190" y="343" text-anchor="middle" font-size="11" fill="#166534" font-weight="500">wiki_update(page_id, section)</text>
+  <!-- wiki_update (write) -->
+  <rect x="68" y="368" width="312" height="30" rx="4" fill="#052e16" stroke="#34d399" stroke-width="1.5"/>
+  <text x="224" y="387" text-anchor="middle" font-size="10" fill="#34d399" font-weight="600">wiki_update(page_id, section)</text>
 
-    <rect x="76" y="360" width="228" height="26" rx="4" fill="#f0fdf4" stroke="#86efac" stroke-width="1"/>
-    <text x="190" y="377" text-anchor="middle" font-size="11" fill="#166534" font-weight="500">wiki_append_timeline(event)</text>
+  <!-- wiki_append_timeline (write) -->
+  <rect x="68" y="406" width="312" height="30" rx="4" fill="#052e16" stroke="#34d399" stroke-width="1.5"/>
+  <text x="224" y="425" text-anchor="middle" font-size="10" fill="#34d399" font-weight="600">wiki_append_timeline(page_id, event)</text>
 
-    <rect x="76" y="394" width="228" height="26" rx="4" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
-    <text x="190" y="411" text-anchor="middle" font-size="11" fill="#374151">wiki_list(type, status)</text>
-  </g>
+  <!-- wiki_list -->
+  <rect x="68" y="444" width="312" height="30" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="224" y="463" text-anchor="middle" font-size="10" fill="#94a3b8">wiki_list(type, status)</text>
 
-  <!-- Entity Registry Tools -->
-  <g id="tools-entity">
-    <rect x="348" y="192" width="260" height="220" rx="6" fill="#ffffff" stroke="#93c5fd" stroke-width="1"/>
-    <text x="368" y="212" font-size="11" font-weight="600" fill="#1e40af">Entity Registry (4 tools)</text>
+  <!-- GROUP 2: Entity Registry (emerald) -->
+  <rect x="410" y="218" width="340" height="248" rx="8" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+  <text x="430" y="242" font-size="11" font-weight="600" fill="#34d399">Entity Registry</text>
+  <text x="580" y="242" text-anchor="end" font-size="9" fill="#475569">4 tools</text>
 
-    <rect x="364" y="224" width="228" height="26" rx="4" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
-    <text x="478" y="241" text-anchor="middle" font-size="11" fill="#374151">entity_resolve(name)</text>
+  <!-- entity_resolve -->
+  <rect x="426" y="254" width="312" height="30" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="582" y="273" text-anchor="middle" font-size="10" fill="#94a3b8">entity_resolve(name)</text>
 
-    <rect x="364" y="258" width="228" height="26" rx="4" fill="#f0fdf4" stroke="#86efac" stroke-width="1"/>
-    <text x="478" y="275" text-anchor="middle" font-size="11" fill="#166534" font-weight="500">entity_register(name, type)</text>
+  <!-- entity_register -->
+  <rect x="426" y="292" width="312" height="30" rx="4" fill="#052e16" stroke="#34d399" stroke-width="1.5"/>
+  <text x="582" y="311" text-anchor="middle" font-size="10" fill="#34d399" font-weight="600">entity_register(name, type)</text>
 
-    <rect x="364" y="292" width="228" height="26" rx="4" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
-    <text x="478" y="309" text-anchor="middle" font-size="11" fill="#374151">entity_list(type)</text>
+  <!-- entity_list -->
+  <rect x="426" y="330" width="312" height="30" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="582" y="349" text-anchor="middle" font-size="10" fill="#94a3b8">entity_list(type)</text>
 
-    <rect x="364" y="326" width="228" height="26" rx="4" fill="#fef3c7" stroke="#fcd34d" stroke-width="1"/>
-    <text x="478" y="343" text-anchor="middle" font-size="11" fill="#92400e" font-weight="500">entity_merge(id1, id2)</text>
+  <!-- entity_merge (warning) -->
+  <rect x="426" y="368" width="312" height="30" rx="4" fill="#1c1207" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="582" y="387" text-anchor="middle" font-size="10" fill="#fbbf24" font-weight="600">entity_merge(id1, id2)</text>
 
-    <!-- Registry description -->
-    <text x="378" y="376" font-size="10" fill="#6b7280">registry.json — unique IDs,</text>
-    <text x="378" y="390" font-size="10" fill="#6b7280">alias resolution, fuzzy match,</text>
-    <text x="378" y="404" font-size="10" fill="#6b7280">dedup detection (0.6+ similarity)</text>
-  </g>
+  <!-- Registry info -->
+  <text x="442" y="426" font-size="9" fill="#475569">registry.json — unique IDs</text>
+  <text x="442" y="440" font-size="9" fill="#475569">alias resolution · fuzzy match</text>
+  <text x="442" y="454" font-size="9" fill="#475569">dedup detection (0.6+ sim)</text>
 
-  <!-- Search + System Tools -->
-  <g id="tools-system">
-    <rect x="636" y="192" width="264" height="220" rx="6" fill="#ffffff" stroke="#93c5fd" stroke-width="1"/>
-    <text x="656" y="212" font-size="11" font-weight="600" fill="#1e40af">Search &amp; System (1 tool)</text>
+  <!-- Cross-link: wiki_create → entity_register -->
+  <path d="M392,345 L410,345" stroke="#fb923c" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arr-orange)"/>
+  <text x="401" y="339" text-anchor="middle" font-size="8" fill="#fb923c">auto-reg</text>
 
-    <!-- Search -->
-    <rect x="652" y="224" width="232" height="44" rx="4" fill="#faf5ff" stroke="#d8b4fe" stroke-width="1"/>
-    <text x="768" y="243" text-anchor="middle" font-size="11" fill="#6b21a8" font-weight="500">wiki_search()</text>
-    <text x="768" y="259" text-anchor="middle" font-size="10" fill="#7c3aed">OpenViking → fallback file search</text>
+  <!-- GROUP 3: Search + System (orange) -->
+  <rect x="768" y="218" width="384" height="248" rx="8" fill="#0f172a" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="788" y="242" font-size="11" font-weight="600" fill="#fb923c">Search &amp; System</text>
+  <text x="1080" y="242" text-anchor="end" font-size="9" fill="#475569">1 tool</text>
 
-    <!-- Stats -->
-    <rect x="652" y="278" width="232" height="30" rx="4" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
-    <text x="768" y="297" text-anchor="middle" font-size="11" fill="#374151">wiki_stats()</text>
+  <!-- wiki_search (OpenViking) -->
+  <rect x="784" y="254" width="356" height="52" rx="4" fill="#1c1207" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="962" y="274" text-anchor="middle" font-size="11" fill="#fb923c" font-weight="600">wiki_search()</text>
+  <text x="962" y="291" text-anchor="middle" font-size="9" fill="#475569">OpenViking semantic → fallback file search</text>
 
-    <!-- Internal modules -->
-    <text x="672" y="336" font-size="10" fill="#6b7280" font-weight="500">Internal Modules:</text>
-    <text x="672" y="354" font-size="10" fill="#374151">wiki_config.py — centralized</text>
-    <text x="672" y="370" font-size="10" fill="#374151">entity_registry.py — registry</text>
-    <text x="672" y="386" font-size="10" fill="#374151">Auth check — optional API key</text>
-    <text x="672" y="402" font-size="10" fill="#374151">Session timeout — 24h</text>
-  </g>
+  <!-- wiki_stats -->
+  <rect x="784" y="314" width="356" height="30" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="962" y="333" text-anchor="middle" font-size="10" fill="#94a3b8">wiki_stats()</text>
+
+  <!-- Internal modules -->
+  <text x="800" y="374" font-size="9" fill="#64748b" font-weight="600" letter-spacing="0.05em">INTERNAL MODULES</text>
+  <text x="800" y="392" font-size="10" fill="#94a3b8">wiki_config.py · centralized config</text>
+  <text x="800" y="408" font-size="10" fill="#94a3b8">entity_registry.py · registry + aliases</text>
+  <text x="800" y="424" font-size="10" fill="#94a3b8">Auth check · optional API key</text>
+  <text x="800" y="440" font-size="10" fill="#94a3b8">Path validation · 24h session</text>
+  <text x="800" y="456" font-size="10" fill="#94a3b8">yaml.safe_load() frontmatter parsing</text>
+
+  <!-- Arrows: tool groups → storage (bottom) -->
+  <line x1="222" y1="466" x2="222" y2="490" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-violet)"/>
+  <line x1="580" y1="466" x2="580" y2="490" stroke="#34d399" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-emerald)"/>
+
+  <!-- Arrow: wiki_search → OpenViking (dashed external) -->
+  <path d="M962,306 L962,326 L1100,326 L1100,490" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#arr-cyan)"/>
+  <rect x="1102" y="320" width="90" height="24" rx="4" fill="#030d1f" stroke="#22d3ee" stroke-width="1"/>
+  <text x="1147" y="336" text-anchor="middle" font-size="10" fill="#22d3ee">OpenViking</text>
 
   <!-- ===== STORAGE LAYER ===== -->
-  <rect x="40" y="458" width="880" height="142" rx="8" fill="#f0fdf4" stroke="#059669" stroke-width="1.5"/>
-  <text x="60" y="478" font-size="12" fill="#166534" font-weight="600" letter-spacing="0.05em">STORAGE (bind mount: ./wiki → /data)</text>
+  <rect x="32" y="498" width="1136" height="160" rx="10" fill="#030d1f" stroke="#334155" stroke-width="1.5"/>
+  <rect x="32" y="498" width="1136" height="32" rx="10" fill="#0c1824" stroke="#334155" stroke-width="1.5"/>
+  <rect x="32" y="522" width="1136" height="8" fill="#0c1824"/>
+  <text x="52" y="518" font-size="12" font-weight="600" fill="#a78bfa" letter-spacing="0.06em">STORAGE</text>
+  <text x="128" y="518" font-size="10" fill="#475569">./wiki (bind mount) → /data (container)</text>
 
-  <!-- Wiki Pages -->
-  <g id="storage-pages">
-    <rect x="60" y="492" width="300" height="92" rx="6" fill="#ffffff" stroke="#86efac" stroke-width="1"/>
-    <text x="80" y="510" font-size="11" font-weight="500" fill="#166534">Markdown Pages</text>
-    <!-- Directory boxes -->
-    <rect x="76" y="520" width="60" height="22" rx="3" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
-    <text x="106" y="535" text-anchor="middle" font-size="9" fill="#374151">entities/</text>
-    <rect x="142" y="520" width="60" height="22" rx="3" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
-    <text x="172" y="535" text-anchor="middle" font-size="9" fill="#374151">concepts/</text>
-    <rect x="208" y="520" width="54" height="22" rx="3" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
-    <text x="235" y="535" text-anchor="middle" font-size="9" fill="#374151">people/</text>
-    <rect x="268" y="520" width="54" height="22" rx="3" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
-    <text x="295" y="535" text-anchor="middle" font-size="9" fill="#374151">projects/</text>
-    <rect x="76" y="548" width="70" height="22" rx="3" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
-    <text x="111" y="563" text-anchor="middle" font-size="9" fill="#374151">meetings/</text>
-    <rect x="152" y="548" width="50" height="22" rx="3" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
-    <text x="177" y="563" text-anchor="middle" font-size="9" fill="#374151">ideas/</text>
-    <rect x="208" y="548" width="54" height="22" rx="3" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
-    <text x="235" y="563" text-anchor="middle" font-size="9" fill="#374151">tools/</text>
-    <rect x="268" y="548" width="76" height="22" rx="3" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
-    <text x="306" y="563" text-anchor="middle" font-size="9" fill="#374151">comparisons/</text>
-
-    <text x="80" y="580" font-size="9" fill="#059669">SCHEMA v3: Truth + Timeline</text>
-    <text x="250" y="580" font-size="9" fill="#059669">9 types</text>
-  </g>
+  <!-- Pages -->
+  <rect x="52" y="540" width="520" height="108" rx="6" fill="#0f172a" stroke="#a78bfa" stroke-width="1"/>
+  <text x="72" y="560" font-size="11" font-weight="600" fill="#a78bfa">Markdown Pages</text>
+  <!-- Subdir boxes -->
+  <rect x="72" y="570" width="80" height="22" rx="3" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="112" y="585" text-anchor="middle" font-size="9" fill="#94a3b8">concepts/</text>
+  <rect x="160" y="570" width="80" height="22" rx="3" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="200" y="585" text-anchor="middle" font-size="9" fill="#94a3b8">entities/</text>
+  <rect x="248" y="570" width="80" height="22" rx="3" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="288" y="585" text-anchor="middle" font-size="9" fill="#94a3b8">people/</text>
+  <rect x="336" y="570" width="80" height="22" rx="3" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="376" y="585" text-anchor="middle" font-size="9" fill="#94a3b8">projects/</text>
+  <rect x="424" y="570" width="80" height="22" rx="3" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="464" y="585" text-anchor="middle" font-size="9" fill="#94a3b8">meetings/</text>
+  <rect x="72" y="598" width="80" height="22" rx="3" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="112" y="613" text-anchor="middle" font-size="9" fill="#94a3b8">ideas/</text>
+  <rect x="160" y="598" width="80" height="22" rx="3" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="200" y="613" text-anchor="middle" font-size="9" fill="#94a3b8">comparisons/</text>
+  <rect x="248" y="598" width="80" height="22" rx="3" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="288" y="613" text-anchor="middle" font-size="9" fill="#94a3b8">queries/</text>
+  <rect x="336" y="598" width="80" height="22" rx="3" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="376" y="613" text-anchor="middle" font-size="9" fill="#94a3b8">tools/</text>
+  <text x="72" y="640" font-size="9" fill="#475569">SCHEMA v3 · Compiled Truth + Timeline · 9 types</text>
 
   <!-- Metadata -->
-  <g id="storage-meta">
-    <rect x="380" y="492" width="200" height="92" rx="6" fill="#ffffff" stroke="#86efac" stroke-width="1"/>
-    <text x="400" y="510" font-size="11" font-weight="500" fill="#166534">Metadata</text>
-
-    <rect x="396" y="520" width="168" height="22" rx="3" fill="#fffbeb" stroke="#fcd34d" stroke-width="1"/>
-    <text x="480" y="535" text-anchor="middle" font-size="10" fill="#92400e">registry.json</text>
-
-    <rect x="396" y="548" width="168" height="22" rx="3" fill="#faf5ff" stroke="#d8b4fe" stroke-width="1"/>
-    <text x="480" y="563" text-anchor="middle" font-size="10" fill="#6b21a8">graph.json</text>
-
-    <text x="400" y="580" font-size="9" fill="#059669">Entity IDs + Knowledge Graph</text>
-  </g>
+  <rect x="592" y="540" width="280" height="108" rx="6" fill="#0f172a" stroke="#fbbf24" stroke-width="1"/>
+  <text x="612" y="560" font-size="11" font-weight="600" fill="#fbbf24">Metadata</text>
+  <rect x="612" y="572" width="248" height="28" rx="4" fill="#1c1207" stroke="#fbbf24" stroke-width="1"/>
+  <text x="736" y="591" text-anchor="middle" font-size="11" fill="#fbbf24">registry.json</text>
+  <rect x="612" y="608" width="248" height="28" rx="4" fill="#1c1207" stroke="#a78bfa" stroke-width="1"/>
+  <text x="736" y="627" text-anchor="middle" font-size="11" fill="#a78bfa">graph.json</text>
 
   <!-- Source Materials -->
-  <g id="storage-src">
-    <rect x="600" y="492" width="300" height="92" rx="6" fill="#ffffff" stroke="#86efac" stroke-width="1"/>
-    <text x="620" y="510" font-size="11" font-weight="500" fill="#166534">Source Materials (src/)</text>
-    <text x="620" y="530" font-size="9" fill="#6b7280">Not indexed. Referenced by wiki pages.</text>
+  <rect x="892" y="540" width="276" height="108" rx="6" fill="#0f172a" stroke="#64748b" stroke-width="1"/>
+  <text x="912" y="560" font-size="11" font-weight="600" fill="#94a3b8">Source Materials</text>
+  <text x="912" y="576" font-size="9" fill="#475569">src/ · not indexed</text>
+  <rect x="912" y="584" width="58" height="20" rx="3" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="941" y="597" text-anchor="middle" font-size="8" fill="#64748b">images/</text>
+  <rect x="976" y="584" width="58" height="20" rx="3" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="1005" y="597" text-anchor="middle" font-size="8" fill="#64748b">pdfs/</text>
+  <rect x="1040" y="584" width="58" height="20" rx="3" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="1069" y="597" text-anchor="middle" font-size="8" fill="#64748b">articles/</text>
+  <rect x="1104" y="584" width="52" height="20" rx="3" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="1130" y="597" text-anchor="middle" font-size="8" fill="#64748b">audio/</text>
+  <rect x="912" y="610" width="58" height="20" rx="3" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="941" y="623" text-anchor="middle" font-size="8" fill="#64748b">videos/</text>
 
-    <rect x="616" y="540" width="50" height="18" rx="2" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
-    <text x="641" y="553" text-anchor="middle" font-size="9" fill="#374151">images/</text>
-    <rect x="672" y="540" width="46" height="18" rx="2" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
-    <text x="695" y="553" text-anchor="middle" font-size="9" fill="#374151">pdfs/</text>
-    <rect x="724" y="540" width="50" height="18" rx="2" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
-    <text x="749" y="553" text-anchor="middle" font-size="9" fill="#374151">articles/</text>
-    <rect x="780" y="540" width="50" height="18" rx="2" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
-    <text x="805" y="553" text-anchor="middle" font-size="9" fill="#374151">audio/</text>
-    <rect x="836" y="540" width="50" height="18" rx="2" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
-    <text x="861" y="553" text-anchor="middle" font-size="9" fill="#374151">videos/</text>
+  <!-- ===== AUTOMATION PIPELINE STRIP ===== -->
+  <rect x="32" y="676" width="1136" height="100" rx="10" fill="#030d1f" stroke="#fb923c" stroke-width="1"/>
+  <rect x="32" y="676" width="1136" height="28" rx="10" fill="#1c1207" stroke="#fb923c" stroke-width="1"/>
+  <rect x="32" y="696" width="1136" height="8" fill="#1c1207"/>
+  <text x="52" y="694" font-size="11" font-weight="600" fill="#fb923c" letter-spacing="0.06em">AUTOMATION PIPELINE</text>
+  <text x="200" y="694" font-size="9" fill="#475569">cron scripts · scheduled tasks</text>
 
-    <text x="620" y="580" font-size="9" fill="#059669">Raw files — read-only archive</text>
-  </g>
+  <!-- 4 pipeline boxes -->
+  <!-- auto_index -->
+  <rect x="68" y="714" width="240" height="52" rx="6" fill="#0f172a" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="188" y="734" text-anchor="middle" font-size="11" fill="#a78bfa" font-weight="600">auto_index.py</text>
+  <text x="188" y="750" text-anchor="middle" font-size="9" fill="#475569">graph.json + OpenViking sync</text>
 
-  <!-- ===== EDGES: Tools → Storage ===== -->
-  <!-- Wiki CRUD → Pages -->
-  <path d="M190,412 L190,430 L210,430 L210,492" stroke="#059669" stroke-width="1.5" fill="none" marker-end="url(#a-green)"/>
+  <!-- arrow -->
+  <line x1="308" y1="740" x2="328" y2="740" stroke="#fb923c" stroke-width="1" marker-end="url(#arr-orange)"/>
 
-  <!-- Entity Registry → Metadata -->
-  <path d="M478,412 L478,430 L480,430 L480,492" stroke="#059669" stroke-width="1.5" fill="none" marker-end="url(#a-green)"/>
+  <!-- dream_cycle -->
+  <rect x="328" y="714" width="240" height="52" rx="6" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="448" y="734" text-anchor="middle" font-size="11" fill="#fbbf24" font-weight="600">dream_cycle.py</text>
+  <text x="448" y="750" text-anchor="middle" font-size="9" fill="#475569">LLM audit · contradiction detection</text>
 
-  <!-- Search → OpenViking (external) -->
-  <path d="M768,412 L768,430 L880,430 L880,460" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#a-purple)"/>
-  <text x="840" y="446" font-size="9" fill="#7c3aed">OpenViking</text>
+  <!-- arrow -->
+  <line x1="568" y1="740" x2="588" y2="740" stroke="#fb923c" stroke-width="1" marker-end="url(#arr-orange)"/>
 
-  <!-- wiki_create → Entity Registry (internal cross-reference) -->
-  <path d="M320,305 L348,305" stroke="#ea580c" stroke-width="1" stroke-dasharray="3,2" marker-end="url(#a-orange)"/>
-  <text x="328" y="298" font-size="8" fill="#ea580c">auto-register</text>
+  <!-- memory_to_wiki -->
+  <rect x="588" y="714" width="240" height="52" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+  <text x="708" y="734" text-anchor="middle" font-size="11" fill="#34d399" font-weight="600">memory_to_wiki.py</text>
+  <text x="708" y="750" text-anchor="middle" font-size="9" fill="#475569">OpenViking → Wiki sync</text>
 
-  <!-- ===== AUTOMATION PIPELINE (bottom) ===== -->
-  <g id="automation-pipeline">
-    <rect x="40" y="618" width="880" height="68" rx="6" fill="#fef3c7" stroke="#fbbf24" stroke-width="1"/>
-    <text x="60" y="638" font-size="10" fill="#92400e" font-weight="600">AUTOMATION PIPELINE (cron scripts)</text>
+  <!-- arrow -->
+  <line x1="828" y1="740" x2="848" y2="740" stroke="#fb923c" stroke-width="1" marker-end="url(#arr-orange)"/>
 
-    <!-- 4 pipeline boxes -->
-    <rect x="60" y="648" width="180" height="28" rx="4" fill="#ffffff" stroke="#fcd34d" stroke-width="1"/>
-    <text x="150" y="666" text-anchor="middle" font-size="10" fill="#374151">auto_index.py — graph + OV sync</text>
-
-    <rect x="256" y="648" width="180" height="28" rx="4" fill="#ffffff" stroke="#fcd34d" stroke-width="1"/>
-    <text x="346" y="666" text-anchor="middle" font-size="10" fill="#374151">dream_cycle.py — LLM audit</text>
-
-    <rect x="452" y="648" width="180" height="28" rx="4" fill="#ffffff" stroke="#fcd34d" stroke-width="1"/>
-    <text x="542" y="666" text-anchor="middle" font-size="10" fill="#374151">memory_to_wiki.py — OV→Wiki</text>
-
-    <rect x="648" y="648" width="180" height="28" rx="4" fill="#ffffff" stroke="#fcd34d" stroke-width="1"/>
-    <text x="738" y="666" text-anchor="middle" font-size="10" fill="#374151">wiki-to-notion.py — Wiki→Notion</text>
-
-    <!-- Arrows between pipeline boxes -->
-    <line x1="240" y1="662" x2="256" y2="662" stroke="#d97706" stroke-width="1" marker-end="url(#a-orange)"/>
-    <line x1="436" y1="662" x2="452" y2="662" stroke="#d97706" stroke-width="1" marker-end="url(#a-orange)"/>
-    <line x1="632" y1="662" x2="648" y2="662" stroke="#d97706" stroke-width="1" marker-end="url(#a-orange)"/>
-  </g>
+  <!-- wiki-to-notion -->
+  <rect x="848" y="714" width="240" height="52" rx="6" fill="#0f172a" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="968" y="734" text-anchor="middle" font-size="11" fill="#22d3ee" font-weight="600">wiki-to-notion.py</text>
+  <text x="968" y="750" text-anchor="middle" font-size="9" fill="#475569">Wiki ↔ NAS ↔ Notion sync</text>
 
   <!-- ===== LEGEND ===== -->
-  <g id="legend" transform="translate(720, 78)">
-    <rect x="0" y="0" width="190" height="54" rx="4" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
-    <text x="12" y="16" font-size="10" font-weight="600" fill="#374151">LEGEND</text>
-    <rect x="12" y="24" width="12" height="10" rx="2" fill="#f0fdf4" stroke="#86efac" stroke-width="1"/>
-    <text x="28" y="33" font-size="9" fill="#6b7280">Write operation</text>
-    <rect x="102" y="24" width="12" height="10" rx="2" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
-    <text x="118" y="33" font-size="9" fill="#6b7280">Read only</text>
-    <line x1="12" y1="45" x2="36" y2="45" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="4,2"/>
-    <text x="42" y="48" font-size="9" fill="#6b7280">External (optional)</text>
-  </g>
+  <rect x="960" y="68" width="200" height="84" rx="6" fill="#0a1628" stroke="#334155" stroke-width="1"/>
+  <text x="976" y="88" font-size="9" font-weight="700" fill="#64748b" letter-spacing="0.08em">LEGEND</text>
+  <rect x="976" y="98" width="12" height="12" rx="2" fill="#052e16" stroke="#34d399" stroke-width="1.5"/>
+  <text x="994" y="109" font-size="9" fill="#64748b">Write operation</text>
+  <rect x="976" y="118" width="12" height="12" rx="2" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="994" y="129" font-size="9" fill="#64748b">Read / query</text>
+  <line x1="976" y1="146" x2="998" y2="146" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="1004" y="150" font-size="9" fill="#64748b">External (optional)</text>
+  <line x1="976" y1="162" x2="998" y2="162" stroke="#fb923c" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="1004" y="166" font-size="9" fill="#64748b">Internal link</text>
+
 </svg>

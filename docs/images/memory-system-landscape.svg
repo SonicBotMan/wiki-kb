@@ -1,219 +1,274 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 720" width="960" height="720" font-family="system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 780" width="1200" height="780">
+  <style>
+    text { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace; }
+  </style>
   <defs>
-    <marker id="arr-blue" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,3.5 L0,7 Z" fill="#2563eb"/>
+    <marker id="arr-c" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#22d3ee"/>
     </marker>
-    <marker id="arr-green" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,3.5 L0,7 Z" fill="#059669"/>
+    <marker id="arr-e" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#34d399"/>
     </marker>
-    <marker id="arr-orange" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,3.5 L0,7 Z" fill="#ea580c"/>
+    <marker id="arr-a" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#fbbf24"/>
     </marker>
-    <marker id="arr-purple" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,3.5 L0,7 Z" fill="#7c3aed"/>
+    <marker id="arr-v" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#a78bfa"/>
     </marker>
-    <marker id="arr-gray" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,3.5 L0,7 Z" fill="#6b7280"/>
+    <marker id="arr-o" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#fb923c"/>
     </marker>
-    <marker id="arr-red" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,3.5 L0,7 Z" fill="#dc2626"/>
+    <marker id="arr-r" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#fb7185"/>
     </marker>
+    <marker id="arr-s" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#94a3b8"/>
+    </marker>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
   </defs>
 
-  <!-- Background -->
-  <rect width="960" height="720" fill="#ffffff"/>
+  <!-- BACKGROUND -->
+  <rect width="1200" height="780" fill="#020617"/>
+  <rect width="1200" height="780" fill="url(#grid)"/>
 
-  <!-- Title -->
-  <text x="40" y="38" font-size="20" font-weight="600" fill="#0f172a">Memory System Landscape</text>
-  <text x="40" y="56" font-size="12" fill="#6b7280">Wiki-KB in the Agent Memory Stack — Data Flow &amp; Component Map</text>
+  <!-- TITLE BAR -->
+  <rect x="0" y="0" width="1200" height="52" fill="#0a1628"/>
+  <text x="32" y="32" font-size="18" font-weight="700" fill="#ffffff" letter-spacing="0.02em">Agent Memory System Landscape</text>
+  <text x="32" y="46" font-size="10" fill="#64748b">Hierarchical Memory Architecture · Knowledge Flow · Tool Integration</text>
+  <line x1="0" y1="52" x2="1200" y2="52" stroke="#22d3ee" stroke-width="1" opacity="0.4"/>
 
-  <!-- ===== Layer 1: User ===== -->
-  <g id="layer-user">
-    <rect x="350" y="78" width="260" height="44" rx="22" fill="#f9fafb" stroke="#d1d5db" stroke-width="1.5"/>
-    <circle cx="386" cy="100" r="12" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
-    <text x="386" y="104" text-anchor="middle" font-size="12" fill="#2563eb">U</text>
-    <text x="410" y="104" font-size="14" fill="#1f2937" font-weight="500">User / Conversation</text>
-  </g>
+  <!-- ===== AGENT (top center) ===== -->
+  <rect x="460" y="68" width="280" height="56" rx="8" fill="#0c1824" stroke="#22d3ee" stroke-width="2"/>
+  <text x="600" y="90" text-anchor="middle" font-size="14" font-weight="700" fill="#22d3ee">LLM / AI Agent</text>
+  <text x="600" y="107" text-anchor="middle" font-size="10" fill="#64748b">Claude · GPT · GLM · Codex</text>
 
-  <!-- ===== Layer 2: Agent Core ===== -->
-  <g id="layer-agent">
-    <rect x="200" y="148" width="560" height="52" rx="8" fill="#fffbeb" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6,3"/>
-    <text x="220" y="168" font-size="11" fill="#92400e" font-weight="500" letter-spacing="0.05em">AGENT CORE</text>
-    <!-- LLM -->
-    <rect x="340" y="155" width="120" height="36" rx="6" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
-    <text x="400" y="177" text-anchor="middle" font-size="13" fill="#92400e" font-weight="500">LLM</text>
-    <!-- Context Window -->
-    <rect x="500" y="155" width="140" height="36" rx="6" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4,2"/>
-    <text x="570" y="170" text-anchor="middle" font-size="11" fill="#92400e">Context Window</text>
-    <text x="570" y="184" text-anchor="middle" font-size="10" fill="#b45309">~20K tokens</text>
-    <!-- Memory (persistent) -->
-    <rect x="230" y="155" width="90" height="36" rx="6" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
-    <text x="275" y="177" text-anchor="middle" font-size="11" fill="#92400e" font-weight="500">Memory</text>
-  </g>
+  <!-- ===== MEMORY SYSTEM BOX ===== -->
+  <rect x="32" y="142" width="1136" height="400" rx="10" fill="#030d1f" stroke="#334155" stroke-width="1.5"/>
+  <rect x="32" y="142" width="1136" height="34" rx="10" fill="#0c1824" stroke="#334155" stroke-width="1.5"/>
+  <rect x="32" y="168" width="1136" height="8" fill="#0c1824"/>
+  <text x="52" y="165" font-size="13" font-weight="600" fill="#94a3b8" letter-spacing="0.05em">MEMORY SYSTEM</text>
 
-  <!-- ===== Layer 3: Memory Systems (3 columns) ===== -->
-  <!-- Persistent Memory -->
-  <g id="mem-persistent">
-    <rect x="40" y="240" width="220" height="180" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
-    <rect x="40" y="240" width="220" height="30" rx="8" fill="#f0fdf4" stroke="#d1d5db" stroke-width="1.5"/>
-    <rect x="40" y="260" width="220" height="10" fill="#f0fdf4" stroke="#d1d5db" stroke-width="1"/>
-    <text x="60" y="260" font-size="12" fill="#166534" font-weight="600">① Persistent Memory</text>
-    <!-- KV Store -->
-    <rect x="60" y="282" width="180" height="32" rx="5" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
-    <text x="150" y="302" text-anchor="middle" font-size="12" fill="#374151">Memory KV Store</text>
-    <!-- Injected into system prompt -->
-    <text x="60" y="330" font-size="10" fill="#6b7280">Injected into system prompt</text>
-    <text x="60" y="344" font-size="10" fill="#6b7280">every turn. ~4K chars max.</text>
-    <text x="60" y="370" font-size="10" fill="#6b7280">Best for: preferences, env</text>
-    <text x="60" y="384" font-size="10" fill="#6b7280">facts, recurring corrections.</text>
-    <text x="60" y="410" font-size="10" fill="#059669" font-weight="500">✓ Always available</text>
-    <text x="60" y="410" dx="100" font-size="10" fill="#dc2626" font-weight="500">✗ 4K limit</text>
-  </g>
+  <!-- === WORKING MEMORY (emerald) === -->
+  <rect x="52" y="184" width="300" height="150" rx="8" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+  <text x="72" y="208" font-size="11" font-weight="600" fill="#34d399">Working Memory</text>
+  <text x="272" y="208" text-anchor="end" font-size="9" fill="#475569">context window</text>
 
-  <!-- Wiki-KB (highlighted) -->
-  <g id="mem-wiki-kb">
-    <rect x="290" y="240" width="240" height="180" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="2.5"/>
-    <rect x="290" y="240" width="240" height="30" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/>
-    <rect x="290" y="260" width="240" height="10" fill="#dbeafe" stroke="#2563eb" stroke-width="1"/>
-    <text x="310" y="260" font-size="12" fill="#1e40af" font-weight="600">② Wiki-KB  ← This project</text>
-    <!-- MCP Server -->
-    <rect x="310" y="282" width="200" height="32" rx="5" fill="#ffffff" stroke="#93c5fd" stroke-width="1"/>
-    <text x="410" y="302" text-anchor="middle" font-size="12" fill="#1e40af" font-weight="500">MCP Server (11 tools)</text>
-    <!-- Markdown files -->
-    <rect x="310" y="322" width="95" height="28" rx="4" fill="#ffffff" stroke="#93c5fd" stroke-width="1"/>
-    <text x="357" y="340" text-anchor="middle" font-size="10" fill="#374151">Markdown</text>
-    <!-- Entity Registry -->
-    <rect x="415" y="322" width="95" height="28" rx="4" fill="#ffffff" stroke="#93c5fd" stroke-width="1"/>
-    <text x="462" y="340" text-anchor="middle" font-size="10" fill="#374151">Entity Reg</text>
-    <!-- Description -->
-    <text x="310" y="374" font-size="10" fill="#1e40af">Structured knowledge pages</text>
-    <text x="310" y="388" font-size="10" fill="#1e40af">with Truth + Timeline.</text>
-    <text x="310" y="408" font-size="10" fill="#059669" font-weight="500">✓ Agent reads &amp; writes</text>
-  </g>
+  <rect x="68" y="220" width="272" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="204" y="236" text-anchor="middle" font-size="10" fill="#94a3b8">Current conversation context</text>
 
-  <!-- OpenViking -->
-  <g id="mem-openviking">
-    <rect x="560" y="240" width="220" height="180" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
-    <rect x="560" y="240" width="220" height="30" rx="8" fill="#faf5ff" stroke="#d1d5db" stroke-width="1.5"/>
-    <rect x="560" y="260" width="220" height="10" fill="#faf5ff" stroke="#d1d5db" stroke-width="1"/>
-    <text x="580" y="260" font-size="12" fill="#6b21a8" font-weight="600">③ OpenViking</text>
-    <!-- Semantic search -->
-    <rect x="580" y="282" width="180" height="32" rx="5" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
-    <text x="670" y="302" text-anchor="middle" font-size="12" fill="#374151">Semantic Search</text>
-    <!-- Vector index -->
-    <rect x="580" y="322" width="85" height="28" rx="4" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
-    <text x="622" y="340" text-anchor="middle" font-size="10" fill="#374151">Vectors</text>
-    <!-- VLM -->
-    <rect x="675" y="322" width="85" height="28" rx="4" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
-    <text x="717" y="340" text-anchor="middle" font-size="10" fill="#374151">VLM</text>
-    <!-- Description -->
-    <text x="580" y="374" font-size="10" fill="#6b21a8">Embedding-based retrieval.</text>
-    <text x="580" y="388" font-size="10" fill="#6b21a8">Indexed resources + memories.</text>
-    <text x="580" y="408" font-size="10" fill="#059669" font-weight="500">✓ Semantic search</text>
-    <text x="580" y="408" dx="100" font-size="10" fill="#dc2626" font-weight="500">✗ Read-only</text>
-  </g>
+  <rect x="68" y="252" width="272" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="204" y="268" text-anchor="middle" font-size="10" fill="#94a3b8">Retrieved memories (top-k)</text>
 
-  <!-- ===== Layer 4: Skills (Procedural Memory) ===== -->
-  <g id="mem-skills">
-    <rect x="810" y="240" width="120" height="180" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
-    <rect x="810" y="240" width="120" height="30" rx="8" fill="#fff7ed" stroke="#d1d5db" stroke-width="1.5"/>
-    <rect x="810" y="260" width="120" height="10" fill="#fff7ed" stroke="#d1d5db" stroke-width="1"/>
-    <text x="830" y="260" font-size="11" fill="#9a3412" font-weight="600">④ Skills</text>
-    <text x="830" y="292" font-size="10" fill="#6b7280">Reusable</text>
-    <text x="830" y="306" font-size="10" fill="#6b7280">workflows</text>
-    <text x="830" y="320" font-size="10" fill="#6b7280">&amp; procedures.</text>
-    <text x="830" y="352" font-size="10" fill="#059669" font-weight="500">✓ Procedural</text>
-    <text x="830" y="366" font-size="10" fill="#059669" font-weight="500">✓ ~50+ skills</text>
-  </g>
+  <rect x="68" y="284" width="272" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="204" y="300" text-anchor="middle" font-size="10" fill="#94a3b8">Active tool results</text>
 
-  <!-- ===== Layer 5: Automation Pipeline ===== -->
-  <g id="layer-pipeline">
-    <rect x="40" y="462" width="880" height="68" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="6,3"/>
-    <text x="60" y="482" font-size="11" fill="#475569" font-weight="500" letter-spacing="0.05em">AUTOMATION PIPELINE (Cron Jobs)</text>
+  <text x="72" y="326" font-size="8" fill="#475569">ephemeral · context-length limited</text>
 
-    <!-- Memory to Wiki -->
-    <rect x="70" y="496" width="140" height="24" rx="4" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
-    <text x="140" y="512" text-anchor="middle" font-size="10" fill="#166534" font-weight="500">memory_to_wiki.py</text>
+  <!-- Arrow: Working Memory → Agent -->
+  <line x1="202" y1="184" x2="600" y2="124" stroke="#34d399" stroke-width="1.5" marker-end="url(#arr-e)"/>
 
-    <!-- Arrow -->
-    <line x1="214" y1="508" x2="248" y2="508" stroke="#059669" stroke-width="1.5" marker-end="url(#arr-green)"/>
+  <!-- === PERSISTENT MEMORY (amber) === -->
+  <rect x="372" y="184" width="300" height="150" rx="8" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="392" y="208" font-size="11" font-weight="600" fill="#fbbf24">Persistent Memory</text>
+  <text x="582" y="208" text-anchor="end" font-size="9" fill="#475569">session-scoped</text>
 
-    <!-- Dream Cycle -->
-    <rect x="254" y="496" width="130" height="24" rx="4" fill="#fef3c7" stroke="#fcd34d" stroke-width="1"/>
-    <text x="319" y="512" text-anchor="middle" font-size="10" fill="#92400e" font-weight="500">dream_cycle.py</text>
+  <rect x="388" y="220" width="272" height="24" rx="4" fill="#1c1207" stroke="#fbbf24" stroke-width="1"/>
+  <text x="524" y="236" text-anchor="middle" font-size="10" fill="#fbbf24">Session history (short-term)</text>
 
-    <!-- Arrow -->
-    <line x1="388" y1="508" x2="422" y2="508" stroke="#059669" stroke-width="1.5" marker-end="url(#arr-green)"/>
+  <rect x="388" y="252" width="272" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="524" y="268" text-anchor="middle" font-size="10" fill="#94a3b8">Conversation summaries</text>
 
-    <!-- Auto Index -->
-    <rect x="428" y="496" width="140" height="24" rx="4" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
-    <text x="498" y="512" text-anchor="middle" font-size="10" fill="#1e40af" font-weight="500">auto_index.py</text>
+  <rect x="388" y="284" width="272" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="524" y="300" text-anchor="middle" font-size="10" fill="#94a3b8">Key decisions · facts</text>
 
-    <!-- Arrow -->
-    <line x1="572" y1="508" x2="606" y2="508" stroke="#059669" stroke-width="1.5" marker-end="url(#arr-green)"/>
+  <text x="392" y="326" font-size="8" fill="#475569">Redis / SQLite · bounded retention</text>
 
-    <!-- Backup -->
-    <rect x="612" y="496" width="120" height="24" rx="4" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
-    <text x="672" y="512" text-anchor="middle" font-size="10" fill="#374151" font-weight="500">wiki-backup.sh</text>
-  </g>
+  <!-- Arrow: Persistent → Agent -->
+  <line x1="522" y1="184" x2="600" y2="124" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arr-a)"/>
 
-  <!-- ===== Layer 6: Human Interface ===== -->
-  <g id="layer-human">
-    <rect x="40" y="570" width="880" height="48" rx="8" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.5"/>
-    <text x="60" y="590" font-size="11" fill="#166534" font-weight="500" letter-spacing="0.05em">HUMAN INTERFACE</text>
-    <text x="180" y="590" font-size="10" fill="#374151">Text Editor (VS Code / Vim)  ·  Git (version control)  ·  Terminal (manual scripts)  ·  File Browser</text>
-    <text x="780" y="606" font-size="10" fill="#059669" font-weight="500">← Human can edit any .md file directly</text>
-  </g>
+  <!-- === EPISODIC MEMORY (rose) === -->
+  <rect x="692" y="184" width="240" height="150" rx="8" fill="#0f172a" stroke="#fb7185" stroke-width="1.5"/>
+  <text x="712" y="208" font-size="11" font-weight="600" fill="#fb7185">Episodic Memory</text>
+  <text x="852" y="208" text-anchor="end" font-size="9" fill="#475569">event-scoped</text>
 
-  <!-- ===== EDGES ===== -->
+  <rect x="708" y="220" width="212" height="24" rx="4" fill="#1c0a14" stroke="#fb7185" stroke-width="1"/>
+  <text x="814" y="236" text-anchor="middle" font-size="10" fill="#fb7185">Events · actions taken</text>
 
-  <!-- User → Agent Core -->
-  <line x1="480" y1="122" x2="480" y2="148" stroke="#2563eb" stroke-width="2" marker-end="url(#arr-blue)"/>
-  <text x="490" y="140" font-size="10" fill="#2563eb">message</text>
+  <rect x="708" y="252" width="212" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="814" y="268" text-anchor="middle" font-size="10" fill="#94a3b8">Timestamps · outcomes</text>
 
-  <!-- Agent → Persistent Memory (read) -->
-  <path d="M275,200 L275,230 L150,230 L150,240" stroke="#059669" stroke-width="1.5" fill="none" marker-end="url(#arr-green)"/>
+  <rect x="708" y="284" width="212" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="814" y="300" text-anchor="middle" font-size="10" fill="#94a3b8">User preferences · patterns</text>
 
-  <!-- Agent → Wiki-KB (read/write) -->
-  <line x1="410" y1="200" x2="410" y2="240" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arr-blue)"/>
-  <text x="420" y="224" font-size="10" fill="#2563eb" font-weight="500">MCP call</text>
+  <text x="712" y="326" font-size="8" fill="#475569">auto-archived · searchable</text>
 
-  <!-- Agent → OpenViking (read) -->
-  <path d="M570,200 L570,230 L670,230 L670,240" stroke="#059669" stroke-width="1.5" fill="none" marker-end="url(#arr-green)"/>
-  <text x="630" y="226" font-size="10" fill="#7c3aed">viking_search()</text>
+  <!-- Arrow: Episodic → Agent -->
+  <line x1="812" y1="184" x2="700" y2="124" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arr-r)"/>
 
-  <!-- Wiki-KB ↔ OpenViking (sync) -->
-  <line x1="530" y1="330" x2="560" y2="330" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-purple)"/>
-  <text x="535" y="322" font-size="9" fill="#7c3aed">sync</text>
+  <!-- === PROCEDURAL MEMORY (slate) === -->
+  <rect x="952" y="184" width="216" height="150" rx="8" fill="#0f172a" stroke="#64748b" stroke-width="1.5"/>
+  <text x="972" y="208" font-size="11" font-weight="600" fill="#94a3b8">Procedural Memory</text>
+  <text x="1088" y="208" text-anchor="end" font-size="9" fill="#475569">skill-scoped</text>
 
-  <!-- Pipeline → Wiki-KB -->
-  <path d="M410,462 L410,420" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-orange)"/>
+  <rect x="968" y="220" width="188" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="1062" y="236" text-anchor="middle" font-size="10" fill="#94a3b8">Built-in tools (file, terminal)</text>
 
-  <!-- Pipeline → OpenViking -->
-  <path d="M498,462 L498,440 L670,440 L670,420" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-orange)"/>
+  <rect x="968" y="252" width="188" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="1062" y="268" text-anchor="middle" font-size="10" fill="#94a3b8">Installed Skills (~50)</text>
 
-  <!-- Human → Wiki-KB -->
-  <path d="M260,570 L260,545 L410,545 L410,420" stroke="#059669" stroke-width="1.5" fill="none" marker-end="url(#arr-green)"/>
-  <text x="310" y="540" font-size="9" fill="#059669">direct edit .md</text>
+  <rect x="968" y="284" width="188" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="1062" y="300" text-anchor="middle" font-size="10" fill="#94a3b8">Slash commands</text>
 
-  <!-- ===== LEGEND ===== -->
-  <g id="legend" transform="translate(40,640)">
-    <rect x="0" y="0" width="880" height="60" rx="6" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
-    <text x="16" y="18" font-size="11" font-weight="600" fill="#374151">LEGEND</text>
+  <text x="972" y="326" font-size="8" fill="#475569">static · loaded at startup</text>
 
-    <line x1="16" y1="34" x2="46" y2="34" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arr-blue)"/>
-    <text x="54" y="38" font-size="10" fill="#6b7280">Agent → Wiki (MCP read/write)</text>
+  <!-- Arrow: Procedural → Agent -->
+  <line x1="1060" y1="184" x2="700" y2="124" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr-s)"/>
 
-    <line x1="230" y1="34" x2="260" y2="34" stroke="#059669" stroke-width="1.5" marker-end="url(#arr-green)"/>
-    <text x="268" y="38" font-size="10" fill="#6b7280">Memory read</text>
+  <!-- === KNOWLEDGE BASE LAYER (violet) === -->
+  <!-- Label row -->
+  <text x="72" y="362" font-size="10" font-weight="600" fill="#64748b" letter-spacing="0.08em">KNOWLEDGE BASES</text>
 
-    <line x1="370" y1="34" x2="400" y2="34" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-purple)"/>
-    <text x="408" y="38" font-size="10" fill="#6b7280">Bi-directional sync</text>
+  <!-- Wiki-KB (violet) - the star of the show -->
+  <rect x="52" y="374" width="380" height="156" rx="8" fill="#0f172a" stroke="#a78bfa" stroke-width="2"/>
+  <rect x="52" y="374" width="380" height="28" rx="8" fill="#1e1b4b" stroke="#a78bfa" stroke-width="1"/>
+  <rect x="52" y="394" width="380" height="8" fill="#1e1b4b"/>
+  <text x="72" y="392" font-size="12" font-weight="700" fill="#a78bfa">Wiki-KB</text>
+  <text x="280" y="392" text-anchor="end" font-size="9" fill="#64748b">Structured Long-term Memory</text>
 
-    <line x1="540" y1="34" x2="570" y2="34" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-orange)"/>
-    <text x="578" y="38" font-size="10" fill="#6b7280">Cron / scheduled</text>
+  <rect x="68" y="410" width="352" height="28" rx="4" fill="#1e1b4b" stroke="#a78bfa" stroke-width="1"/>
+  <text x="244" y="429" text-anchor="middle" font-size="10" fill="#a78bfa">MCP Server · 11 Tools · Auto-indexed</text>
 
-    <rect x="720" y="26" width="14" height="14" rx="3" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
-    <text x="740" y="38" font-size="10" fill="#6b7280">Highlighted = Wiki-KB</text>
-  </g>
+  <rect x="68" y="446" width="168" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="152" y="462" text-anchor="middle" font-size="9" fill="#94a3b8">9 content types</text>
+
+  <rect x="244" y="446" width="176" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="332" y="462" text-anchor="middle" font-size="9" fill="#94a3b8">Entity Registry</text>
+
+  <rect x="68" y="478" width="352" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="244" y="494" text-anchor="middle" font-size="9" fill="#94a3b8">Compiled Truth + Timeline · Git-versioned</text>
+
+  <text x="72" y="522" font-size="8" fill="#475569">Markdown files · bind mount · Docker deployed</text>
+
+  <!-- Arrow: Wiki-KB → Agent -->
+  <line x1="242" y1="374" x2="600" y2="124" stroke="#a78bfa" stroke-width="2" marker-end="url(#arr-v)"/>
+
+  <!-- OpenViking (orange) -->
+  <rect x="452" y="374" width="300" height="156" rx="8" fill="#0f172a" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="472" y="398" font-size="12" font-weight="600" fill="#fb923c">OpenViking</text>
+  <text x="662" y="398" text-anchor="end" font-size="9" fill="#475569">Semantic Memory</text>
+
+  <rect x="468" y="410" width="272" height="28" rx="4" fill="#1c1207" stroke="#fb923c" stroke-width="1"/>
+  <text x="604" y="429" text-anchor="middle" font-size="10" fill="#fb923c">Vector embeddings · LLM summaries</text>
+
+  <rect x="468" y="446" width="128" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="532" y="462" text-anchor="middle" font-size="9" fill="#94a3b8">Memories</text>
+
+  <rect x="604" y="446" width="136" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="672" y="462" text-anchor="middle" font-size="9" fill="#94a3b8">Resources</text>
+
+  <rect x="468" y="478" width="272" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="604" y="494" text-anchor="middle" font-size="9" fill="#94a3b8">viking:// URIs · full-text search</text>
+
+  <text x="472" y="522" font-size="8" fill="#475569">REST API · session commit pipeline</text>
+
+  <!-- Arrow: OpenViking → Agent -->
+  <line x1="602" y1="374" x2="600" y2="124" stroke="#fb923c" stroke-width="1.5" marker-end="url(#arr-o)"/>
+
+  <!-- Notion (slate) - optional -->
+  <rect x="772" y="374" width="240" height="156" rx="8" fill="#0f172a" stroke="#64748b" stroke-width="1.5"/>
+  <text x="792" y="398" font-size="12" font-weight="600" fill="#94a3b8">Notion</text>
+  <text x="922" y="398" text-anchor="end" font-size="9" fill="#475569">optional</text>
+
+  <rect x="788" y="410" width="212" height="28" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="894" y="429" text-anchor="middle" font-size="10" fill="#94a3b8">Read-only mirror</text>
+
+  <rect x="788" y="446" width="212" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="894" y="462" text-anchor="middle" font-size="9" fill="#64748b">4 databases mapped</text>
+
+  <rect x="788" y="478" width="212" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="894" y="494" text-anchor="middle" font-size="9" fill="#64748b">Entity · Concept · Comparison</text>
+
+  <text x="792" y="522" font-size="8" fill="#475569">via wiki-to-notion.py · sync pipeline</text>
+
+  <!-- Arrow: Notion → Agent (dashed) -->
+  <line x1="892" y1="374" x2="700" y2="124" stroke="#64748b" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arr-s)"/>
+
+  <!-- NAS WebDAV (slate) - bottom right -->
+  <rect x="1032" y="374" width="136" height="156" rx="8" fill="#0f172a" stroke="#475569" stroke-width="1"/>
+  <text x="1052" y="398" font-size="11" font-weight="600" fill="#64748b">NAS</text>
+  <text x="1100" y="398" text-anchor="end" font-size="9" fill="#475569">backup</text>
+  <rect x="1048" y="410" width="108" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="1102" y="426" text-anchor="middle" font-size="9" fill="#64748b">WebDAV :5005</text>
+  <rect x="1048" y="442" width="108" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="1102" y="458" text-anchor="middle" font-size="9" fill="#64748b">Authoritative</text>
+  <rect x="1048" y="474" width="108" height="24" rx="4" fill="#0c1824" stroke="#334155" stroke-width="1"/>
+  <text x="1102" y="490" text-anchor="middle" font-size="9" fill="#64748b">rsync mirror</text>
+  <text x="1052" y="522" font-size="8" fill="#475569">/vol1/1000/wiki</text>
+
+  <!-- ===== DATA FLOW LEGEND (bottom) ===== -->
+  <rect x="32" y="548" width="1136" height="128" rx="10" fill="#030d1f" stroke="#334155" stroke-width="1.5"/>
+  <rect x="32" y="548" width="1136" height="28" rx="10" fill="#0c1824" stroke="#334155" stroke-width="1.5"/>
+  <rect x="32" y="568" width="1136" height="8" fill="#0c1824"/>
+  <text x="52" y="566" font-size="11" font-weight="600" fill="#94a3b8" letter-spacing="0.06em">DATA FLOW</text>
+
+  <!-- Flow description in 4 columns -->
+  <!-- Column 1: Agent writes to Wiki -->
+  <rect x="68" y="586" width="200" height="80" rx="6" fill="#0f172a" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="168" y="606" text-anchor="middle" font-size="10" font-weight="600" fill="#a78bfa">Agent → Wiki-KB</text>
+  <text x="168" y="624" text-anchor="middle" font-size="9" fill="#475569">mcp_wiki_brain wiki_create</text>
+  <text x="168" y="638" text-anchor="middle" font-size="9" fill="#475569">wiki_update · wiki_append_timeline</text>
+  <text x="168" y="656" text-anchor="middle" font-size="8" fill="#64748b">Compiled Truth + Timeline</text>
+
+  <!-- Arrow 1-2 -->
+  <line x1="268" y1="626" x2="288" y2="626" stroke="#64748b" stroke-width="1" marker-end="url(#arr-s)"/>
+
+  <!-- Column 2: Memory to Wiki -->
+  <rect x="288" y="586" width="200" height="80" rx="6" fill="#0f172a" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="388" y="606" text-anchor="middle" font-size="10" font-weight="600" fill="#fb923c">Memory → Wiki</text>
+  <text x="388" y="624" text-anchor="middle" font-size="9" fill="#475569">memory_to_wiki.py (cron)</text>
+  <text x="388" y="638" text-anchor="middle" font-size="9" fill="#475569">OV memories → wiki pages</text>
+  <text x="388" y="656" text-anchor="middle" font-size="8" fill="#64748b">scheduled daily · 03:00</text>
+
+  <!-- Arrow 2-3 -->
+  <line x1="488" y1="626" x2="508" y2="626" stroke="#64748b" stroke-width="1" marker-end="url(#arr-s)"/>
+
+  <!-- Column 3: Dream Cycle audit -->
+  <rect x="508" y="586" width="200" height="80" rx="6" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="608" y="606" text-anchor="middle" font-size="10" font-weight="600" fill="#fbbf24">Dream Cycle Audit</text>
+  <text x="608" y="624" text-anchor="middle" font-size="9" fill="#475569">dream_cycle.py --apply (cron)</text>
+  <text x="608" y="638" text-anchor="middle" font-size="9" fill="#475569">LLM detects contradictions</text>
+  <text x="608" y="656" text-anchor="middle" font-size="8" fill="#64748b">scheduled daily · 03:10</text>
+
+  <!-- Arrow 3-4 -->
+  <line x1="708" y1="626" x2="728" y2="626" stroke="#64748b" stroke-width="1" marker-end="url(#arr-s)"/>
+
+  <!-- Column 4: Auto Index -->
+  <rect x="728" y="586" width="200" height="80" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+  <text x="828" y="606" text-anchor="middle" font-size="10" font-weight="600" fill="#34d399">Auto Index</text>
+  <text x="828" y="624" text-anchor="middle" font-size="9" fill="#475569">auto_index.py --sync (cron)</text>
+  <text x="828" y="638" text-anchor="middle" font-size="9" fill="#475569">graph.json + OpenViking sync</text>
+  <text x="828" y="656" text-anchor="middle" font-size="8" fill="#64748b">scheduled daily · 03:30</text>
+
+  <!-- Arrow 4-5 -->
+  <line x1="928" y1="626" x2="948" y2="626" stroke="#64748b" stroke-width="1" marker-end="url(#arr-s)"/>
+
+  <!-- Column 5: Notion sync -->
+  <rect x="948" y="586" width="200" height="80" rx="6" fill="#0f172a" stroke="#64748b" stroke-width="1.5"/>
+  <text x="1048" y="606" text-anchor="middle" font-size="10" font-weight="600" fill="#94a3b8">Notion Sync</text>
+  <text x="1048" y="624" text-anchor="middle" font-size="9" fill="#475569">wiki-to-notion.py (manual)</text>
+  <text x="1048" y="638" text-anchor="middle" font-size="9" fill="#475569">NAS WebDAV → Notion DBs</text>
+  <text x="1048" y="656" text-anchor="middle" font-size="8" fill="#64748b">bidirectional · optional</text>
+
+  <!-- ===== LEGEND (top right) ===== -->
+  <rect x="960" y="66" width="210" height="66" rx="6" fill="#0a1628" stroke="#334155" stroke-width="1"/>
+  <text x="976" y="88" font-size="9" font-weight="700" fill="#64748b" letter-spacing="0.08em">LEGEND</text>
+  <line x1="976" y1="100" x2="998" y2="100" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="1004" y="104" font-size="9" fill="#64748b">Wiki-KB (this project)</text>
+  <line x1="976" y1="116" x2="998" y2="116" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="1004" y="120" font-size="9" fill="#64748b">OpenViking (semantic)</text>
+  <line x1="976" y1="132" x2="998" y2="132" stroke="#64748b" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="1004" y="136" font-size="9" fill="#64748b">Optional / external</text>
+
 </svg>
