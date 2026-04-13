@@ -17,6 +17,24 @@ from datetime import datetime
 from typing import Optional
 from contextlib import contextmanager
 
+# 共享工具
+try:
+    from wiki_utils import get_frontmatter
+except ImportError:
+    # 独立使用时的 fallback
+    def get_frontmatter(content: str) -> tuple:
+        import yaml
+        match = re.match(r'^---\s*\n(.*?)\n---\s*\n(.*)$', content, re.DOTALL)
+        if match:
+            try:
+                fm = yaml.safe_load(match.group(1)) or {}
+            except Exception:
+                fm = {}
+            if not isinstance(fm, dict):
+                fm = {}
+            return fm, match.group(2)
+        return {}, content
+
 # === Logging ===
 logger = logging.getLogger(__name__)
 
@@ -63,7 +81,7 @@ def load_registry() -> dict:
         with _registry_lock(exclusive=False):
             with open(REGISTRY_PATH, "r", encoding="utf-8") as f:
                 return json.load(f)
-    except (json.JSONDecodeError, IOError):
+    except (json.JSONDecodeError, IOError, TimeoutError):
         return _empty_registry()
 
 
@@ -121,21 +139,6 @@ def normalize_name(name: str) -> str:
     return name
 
 
-def _get_frontmatter(content: str) -> tuple[dict, str]:
-    """提取markdown文件的frontmatter (YAML)"""
-    import yaml
-    match = re.match(r'^---\s*\n(.*?)\n---\s*\n(.*)$', content, re.DOTALL)
-    if match:
-        fm_text = match.group(1)
-        body = match.group(2)
-        try:
-            fm = yaml.safe_load(fm_text) or {}
-        except yaml.YAMLError:
-            fm = {}
-        if not isinstance(fm, dict):
-            fm = {}
-        return fm, body
-    return {}, content
 
 
 def _parse_tags(tag_str: str) -> list:
@@ -240,6 +243,45 @@ def _generate_aliases(title: str, page_path: str = "") -> list[str]:
     return unique_aliases
 
 
+def _is_cjk_char(ch: str) -> bool:
+    """判断字符是否为 CJK（中日韩）字符"""
+    cp = ord(ch)
+    return (0x4E00 <= cp <= 0x9FFF or 0x3400 <= cp <= 0x4DBF or
+            0x20000 <= cp <= 0x2A6DF or 0x2A700 <= cp <= 0x2B73F or
+            0xF900 <= cp <= 0xFAFF or 0x2F800 <= cp <= 0x2FA1F)
+
+
+def _is_boundary_match(needle: str, haystack: str) -> bool:
+    """检查 needle 是否以语系边界出现在 haystack 中。
+
+    Python 的 \\b 对 CJK+Latin 混合文本无效（两者都是 \\w），
+    所以用自定义逻辑：needle 前后必须是空白/标点，或者发生语系切换
+    （CJK↔Latin、数字↔字母等）。
+    """
+    idx = haystack.find(needle)
+    if idx == -1:
+        return False
+
+    before = haystack[idx - 1] if idx > 0 else None
+    after = haystack[idx + len(needle)] if idx + len(needle) < len(haystack) else None
+
+    def _ok_boundary(ch, is_first_char_of_needle):
+        """ch 是 needle 邻接的那个字符，检查是否构成合法边界"""
+        if ch is None:
+            return True
+        if not ch.isalnum():
+            return True  # 空白/标点 天然是边界
+        # ch 是 alnum，检查是否语系切换
+        needle_char = needle[0] if is_first_char_of_needle else needle[-1]
+        if _is_cjk_char(ch) != _is_cjk_char(needle_char):
+            return True  # CJK ↔ Latin 切换
+        if ch.isdigit() != needle_char.isdigit():
+            return True  # 数字 ↔ 字母切换
+        return False  # 同语系相连，不是边界
+
+    return _ok_boundary(before, True) and _ok_boundary(after, False)
+
+
 # === 核心操作 ===
 
 def resolve(name: str) -> Optional[dict]:
@@ -289,21 +331,16 @@ def register(name: str, entity_type: str, page_path: str = "", aliases: list = N
             if normalize_name(_remove_brackets(entity.get("canonical_name", ""))) == no_bracket_norm:
                 return entity
     
-    # 4. 包含关系匹配（要求最小长度4字符 + 单词边界匹配）
+    # 4. 包含关系匹配（要求最小长度4字符 + 语系边界匹配）
     MIN_SUBSTR_LEN = 4
     for entity in reg["entities"].values():
         can_name = entity.get("canonical_name", "")
         can_norm = normalize_name(can_name)
-        # 单词边界匹配：确保子串是独立单词而非其他词的一部分
         if can_norm and len(norm) >= MIN_SUBSTR_LEN and len(can_norm) >= MIN_SUBSTR_LEN:
-            if norm in can_norm:
-                # 检查 norm 是否以单词边界出现在 can_norm 中
-                if re.search(r'\b' + re.escape(norm) + r'\b', can_norm):
-                    return entity
-            if can_norm in norm:
-                # 检查 can_norm 是否以单词边界出现在 norm 中
-                if re.search(r'\b' + re.escape(can_norm) + r'\b', norm):
-                    return entity
+            if norm in can_norm and _is_boundary_match(norm, can_norm):
+                return entity
+            if can_norm in norm and _is_boundary_match(can_norm, norm):
+                return entity
     
     # 5. 创建新实体
     entity_id = generate_id()
@@ -594,7 +631,7 @@ def scan_wiki_pages(wiki_root: str = None) -> dict:
     for md_file in md_files:
         try:
             content = md_file.read_text(encoding="utf-8")
-            fm, body = _get_frontmatter(content)
+            fm, body = get_frontmatter(content)
             
             if not fm:
                 stats["skipped"] += 1

@@ -34,6 +34,46 @@ from typing import Optional
 # Entity Registry integration
 sys.path.insert(0, str(Path(__file__).parent))
 try:
+    from wiki_utils import get_frontmatter as parse_frontmatter, parse_relations_table as parse_relations
+except ImportError:
+    # Fallback: 本地实现
+    def parse_frontmatter(content: str) -> dict:
+        match = re.match(r'^---\s*\n(.*?)\n---\s*\n(.*)$', content, re.DOTALL)
+        if not match:
+            return {}
+        try:
+            fm = yaml.safe_load(match.group(1))
+        except yaml.YAMLError:
+            return {}
+        if not isinstance(fm, dict):
+            return {}
+        return fm
+
+    def parse_relations(content: str) -> list:
+        relations = []
+        in_relations = False
+        header_seen = False
+        for line in content.split('\n'):
+            if line.strip().startswith('## Relations'):
+                in_relations = True
+                header_seen = False
+                continue
+            if in_relations and line.strip().startswith('## '):
+                break
+            if in_relations and line.strip().startswith('|'):
+                if '---' in line:
+                    continue
+                parts = [p.strip() for p in line.split('|')]
+                if not header_seen:
+                    header_seen = True
+                    continue
+                if len(parts) >= 4:
+                    relations.append({
+                        "relation": parts[1],
+                        "target": parts[2],
+                        "note": parts[3] if len(parts) > 3 else ""
+                    })
+        return relations
     import entity_registry as er
     HAS_REGISTRY = True
 except ImportError:
@@ -57,43 +97,6 @@ SCHEMA_FILE = WIKI_ROOT / "SCHEMA.md"
 LLM_BASE_URL = os.environ.get("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
 LLM_MODEL = os.environ.get("DREAM_CYCLE_MODEL", "glm-4-flash")
 LLM_API_KEY = os.environ.get("GLM_API_KEY", "")
-
-# ============ Wiki Parser ============
-
-def parse_frontmatter(content: str) -> dict:
-    """Extract YAML frontmatter from markdown using PyYAML."""
-    match = re.match(r'^---\s*\n(.*?)\n---\s*\n(.*)$', content, re.DOTALL)
-    if not match:
-        return {}
-    try:
-        fm = yaml.safe_load(match.group(1))
-    except yaml.YAMLError:
-        return {}
-    if not isinstance(fm, dict):
-        return {}
-    return fm
-
-
-def parse_relations(content: str) -> list[dict]:
-    """Extract Relations table from markdown."""
-    relations = []
-    in_relations = False
-    for line in content.split('\n'):
-        if line.strip().startswith('## Relations'):
-            in_relations = True
-            continue
-        if in_relations and line.strip().startswith('## '):
-            break
-        if in_relations and line.strip().startswith('|') and '---' not in line:
-            parts = [p.strip() for p in line.split('|')]
-            if len(parts) >= 4:
-                relations.append({
-                    "relation": parts[1],
-                    "target": parts[2],
-                    "note": parts[3] if len(parts) > 3 else ""
-                })
-    return relations
-
 
 def extract_tldr(content: str) -> str:
     """Extract TL;DR section content (v2 compat)."""

@@ -1,22 +1,24 @@
-# Wiki Brain — 通用 Docker Compose 配置
-# 适用于本地开发和测试环境
-# 生产环境请使用 docker-compose.production.yml
+# Wiki Brain — 生产环境 Docker Compose 配置
+# 适用于 NAS/服务器部署，使用预构建镜像
+# 使用方式: docker compose -f docker-compose.production.yml up -d
 
 services:
   wiki-brain:
-    build: .
+    image: wiki-wiki-brain
     container_name: wiki-brain
     restart: unless-stopped
     ports:
       - "${MCP_PORT:-8764}:8764"
     volumes:
-      - ./wiki:/data                    # Wiki 数据目录
-      - ./scripts:/app/scripts          # 脚本目录（开发热更新）
+      - ${WIKI_DATA:-/vol1/1000/wiki}:/data
+      - ${WIKI_SCRIPTS:-/vol1/1000/wiki/scripts}:/app/scripts
     env_file:
       - .env
     environment:
       - PYTHONPATH=/app/scripts
       - PYTHONUNBUFFERED=1
+    networks:
+      - openviking_default
     deploy:
       resources:
         limits:
@@ -34,3 +36,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+networks:
+  openviking_default:
+    external: true

@@ -17,6 +17,10 @@ from datetime import datetime
 import tempfile
 import shutil
 
+# 共享工具
+sys.path.insert(0, str(Path(__file__).parent))
+from wiki_utils import get_frontmatter, parse_relations_table
+
 # ============================================================
 # 0. 日志配置
 # ============================================================
@@ -42,8 +46,8 @@ def _atomic_write(path: Path, content: str, encoding: str = 'utf-8'):
     try:
         with os.fdopen(fd, 'w', encoding=encoding) as f:
             f.write(content)
-        # 同步到磁盘
-        os.fsync(f.fileno()) if False else None  # fd already closed
+            f.flush()
+            os.fsync(f.fileno())
         Path(tmp_path).rename(path)
     except Exception:
         try:
@@ -295,25 +299,12 @@ def _resolve_page_path(page_id: str) -> Optional[Path]:
     return None
 
 
-def _get_frontmatter(content: str) -> tuple[dict, str]:
-    """提取 markdown 文件的 frontmatter (YAML)"""
-    match = re.match(r'^---\s*\n(.*?)\n---\s*\n(.*)$', content, re.DOTALL)
-    if match:
-        fm_text = match.group(1)
-        body = match.group(2)
-        try:
-            fm = yaml.safe_load(fm_text) or {}
-        except yaml.YAMLError:
-            fm = {}
-        if not isinstance(fm, dict):
-            fm = {}
-        return fm, body
-    return {}, content
+
 
 
 def _update_frontmatter(content: str, updates: dict) -> str:
     """更新 frontmatter 中的指定字段"""
-    fm, body = _get_frontmatter(content)
+    fm, body = get_frontmatter(content)
     fm.update(updates)
     fm_text = yaml.dump(fm, default_flow_style=False, allow_unicode=True, sort_keys=False)
     return f"---\n{fm_text}---\n{body}"
@@ -360,22 +351,23 @@ def _update_section(body: str, section: str, content: str) -> str:
         if not in_section:
             new_lines.append(line)
 
-    # 如果 section 不存在，在适当位置插入
+    # 如果 section 不存在，在适当位置插入（Timeline 之前的 --- 分隔线前）
     if not section_found:
-        # 找到 ## Timeline 之前的 ---
-        timeline_idx = None
-        in_timeline = False
+        separator_idx = None
         for i, line in enumerate(new_lines):
-            if line.strip() == '## Timeline':
-                in_timeline = True
-            if in_timeline and line.strip() == '---':
-                timeline_idx = i
-                break
+            if line.strip() == '---':
+                # 检查后续几行是否为 ## Timeline（允许空行）
+                for j in range(i + 1, min(i + 4, len(new_lines))):
+                    if new_lines[j].strip() == '## Timeline':
+                        separator_idx = i
+                        break
+                if separator_idx is not None:
+                    break
 
-        if timeline_idx is not None:
-            new_lines.insert(timeline_idx, f"## {section}\n{content}")
+        if separator_idx is not None:
+            new_lines.insert(separator_idx, f"## {section}\n{content}\n")
         else:
-            new_lines.append(f"## {section}\n{content}")
+            new_lines.append(f"\n## {section}\n{content}\n")
 
     return '\n'.join(new_lines)
 
@@ -448,7 +440,7 @@ def _fallback_file_search(query: str, type_filter: str = "") -> List[Dict]:
 
         try:
             content = md_file.read_text(encoding='utf-8')
-            fm, body = _get_frontmatter(content)
+            fm, body = get_frontmatter(content)
 
             # 类型过滤
             if type_filter and fm.get('type') != type_filter:
@@ -480,13 +472,13 @@ mcp = FastMCP("wiki-brain", host="0.0.0.0", port=int(os.environ.get("MCP_PORT", 
 # ============================================================
 
 @mcp.tool()
-def wiki_search(query: str, type: str = "") -> List[Dict]:
+def wiki_search(query: str, entity_type: str = "") -> List[Dict]:
     """
     语义搜索 wiki 页面。
     调用 OpenViking search API，支持按 type 过滤。
     返回 [{title, type, page_path, summary}]
     """
-    results = _openviking_search(query, type)
+    results = _openviking_search(query, entity_type)
     return results
 
 
@@ -502,7 +494,7 @@ def wiki_get(page_id: str) -> Dict:
         raise ValueError(f"页面未找到: {page_id}")
 
     content = path.read_text(encoding='utf-8')
-    fm, body = _get_frontmatter(content)
+    fm, body = get_frontmatter(content)
 
     # 提取各 section
     summary = _get_section_content(body, "Executive Summary")
@@ -563,8 +555,12 @@ def wiki_create(name: str, entity_type: str, description: str, content: str = ""
     default_content = content if content else description
 
     # 构建 v3 schema 结构
+    fm_text = yaml.dump(
+        {"title": name, "created": now, "updated": now, "type": entity_type, "tags": [], "sources": [], "status": "draft"},
+        default_flow_style=False, allow_unicode=True, sort_keys=False
+    ).rstrip('\n')
     page_content = f"""---
-{yaml.dump({"title": name, "created": now, "updated": now, "type": entity_type, "tags": [], "sources": [], "status": "draft"}, default_flow_style=False, allow_unicode=True)}
+{fm_text}
 ---
 
 # {name}
@@ -593,13 +589,21 @@ def wiki_create(name: str, entity_type: str, description: str, content: str = ""
     page_path.parent.mkdir(parents=True, exist_ok=True)
     _atomic_write(page_path, page_content)
 
-    # 注册到 Entity Registry
+    # 注册到 Entity Registry（失败时回滚已创建的页面文件）
     rel_path = str(page_path.relative_to(WIKI_ROOT))
-    entity = entity_registry.register(
-        name=name,
-        entity_type=entity_type,
-        page_path=rel_path
-    )
+    try:
+        entity = entity_registry.register(
+            name=name,
+            entity_type=entity_type,
+            page_path=rel_path
+        )
+    except Exception:
+        # 回滚：删除已创建的页面文件
+        try:
+            page_path.unlink()
+        except OSError:
+            pass
+        raise
 
     # Invalidate page cache since we created a new page
     _invalidate_page_cache()
@@ -615,7 +619,8 @@ def wiki_create(name: str, entity_type: str, description: str, content: str = ""
 @mcp.tool()
 def wiki_update(page_id: str, section: str, content: str) -> Dict:
     """
-    更新指定 section（executive_summary / key_facts / relations / timeline）。
+    更新指定 section（executive_summary / key_facts / relations）。
+    Timeline 请使用 wiki_append_timeline 追加。
     返回 {page_path, updated_sections}
     """
     ALLOWED_SECTIONS = {'executive_summary', 'key_facts', 'relations', 'timeline'}
@@ -623,16 +628,14 @@ def wiki_update(page_id: str, section: str, content: str) -> Dict:
         raise ValueError(f"无效 section: '{section}'，允许: {ALLOWED_SECTIONS}")
     
     if section.lower() == "timeline":
-        return {
-            "error": "Timeline section 不支持直接更新，请使用 wiki_append_timeline 工具追加条目"
-        }
+        raise ValueError("Timeline section 不支持直接更新，请使用 wiki_append_timeline 工具追加条目")
     
     path = _resolve_page_path(page_id)
     if not path:
         raise ValueError(f"页面未找到: {page_id}")
 
     original = path.read_text(encoding='utf-8')
-    fm, body = _get_frontmatter(original)
+    fm, body = get_frontmatter(original)
 
     # 更新 body 中的 section
     body = _update_section(body, section, content)
@@ -667,7 +670,7 @@ def wiki_append_timeline(page_id: str, event: str, source: str = "") -> Dict:
         raise ValueError(f"页面未找到: {page_id}")
 
     original = path.read_text(encoding='utf-8')
-    fm, body = _get_frontmatter(original)
+    fm, body = get_frontmatter(original)
 
     # 格式化 timeline 条目
     now = datetime.now().strftime("%Y-%m-%d")
@@ -682,12 +685,8 @@ def wiki_append_timeline(page_id: str, event: str, source: str = "") -> Dict:
         before = parts[0]
         after = parts[1] if len(parts) > 1 else ""
 
-        # 找到 --- 分隔线
-        if "---" in after:
-            sep_idx = after.index("---")
-            after = after[:sep_idx] + entry + "---\n" + after[sep_idx+3:]
-        else:
-            after = after + entry
+        # 直接在 Timeline section 内容末尾追加（不做 --- 匹配，避免内容误判）
+        after = after + entry
 
         body = before + timeline_marker + after
     else:
@@ -729,7 +728,7 @@ def wiki_list(entity_type: str = "", status: str = "") -> List[Dict]:
 
         try:
             content = md_file.read_text(encoding='utf-8')
-            fm, _ = _get_frontmatter(content)
+            fm, _ = get_frontmatter(content)
 
             # 类型过滤
             if entity_type and fm.get('type') != entity_type:
@@ -861,7 +860,7 @@ def wiki_stats() -> Dict:
 
         try:
             content = md_file.read_text(encoding='utf-8')
-            fm, _ = _get_frontmatter(content)
+            fm, _ = get_frontmatter(content)
             ptype = fm.get('type', 'unknown')
             page_counts[ptype] = page_counts.get(ptype, 0) + 1
         except Exception as e:
