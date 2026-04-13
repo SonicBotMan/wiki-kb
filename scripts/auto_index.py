@@ -22,8 +22,26 @@ import os
 import re
 import sys
 import hashlib
+import logging
 from datetime import datetime
 from pathlib import Path
+
+# ============================================================
+# 日志配置
+# ============================================================
+LOG_DIR = Path(os.environ.get("WIKI_ROOT", str(Path.home() / "wiki"))) / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+_logger = logging.getLogger("auto-index")
+_logger.setLevel(logging.DEBUG)
+if not _logger.handlers:
+    _fh = logging.FileHandler(LOG_DIR / "auto-index.log", encoding="utf-8")
+    _fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+    _logger.addHandler(_fh)
+    _sh = logging.StreamHandler(sys.stderr)
+    _sh.setLevel(logging.WARNING)
+    _sh.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+    _logger.addHandler(_sh)
 
 # Entity Registry integration
 import sys
@@ -42,33 +60,32 @@ PEOPLE_DIR = WIKI_ROOT / "people"
 PROJECTS_DIR = WIKI_ROOT / "projects"
 MEETINGS_DIR = WIKI_ROOT / "meetings"
 IDEAS_DIR = WIKI_ROOT / "ideas"
+COMPARISONS_DIR = WIKI_ROOT / "comparisons"
+QUERIES_DIR = WIKI_ROOT / "queries"
+TOOLS_DIR = WIKI_ROOT / "tools"
 GRAPH_FILE = WIKI_ROOT / "graph.json"
 STATE_FILE = WIKI_ROOT / ".auto_index_state.json"
-OPENVIKING_BIN = Path(os.environ.get("OPENVIKING_BIN", ""))
-
-# OpenViking config
+# OpenViking config (REST API — no CLI needed)
 OV_BASE_URL = os.environ.get("OPENVIKING_ENDPOINT", "http://localhost:1933")
-OV_API_KEY = os.environ.get("OPENVIKING_API_KEY", "")
 OV_ACCOUNT = os.environ.get("OPENVIKING_ACCOUNT", "hermes")
 OV_USER = os.environ.get("OPENVIKING_USER", "default")
+OV_API_KEY = os.environ.get("OPENVIKING_API_KEY", "")
 
 
 # ============ Wiki Parser ============
 
 def parse_frontmatter(content: str) -> dict:
-    """Extract YAML frontmatter."""
-    match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
+    """Extract YAML frontmatter using PyYAML."""
+    import yaml
+    match = re.match(r'^---\s*\n(.*?)\n---\s*\n(.*)$', content, re.DOTALL)
     if not match:
         return {}
-    fm = {}
-    for line in match.group(1).split('\n'):
-        if ':' in line:
-            key, _, val = line.partition(':')
-            key = key.strip()
-            val = val.strip().strip('"').strip("'")
-            if val.startswith('[') and val.endswith(']'):
-                val = [v.strip().strip('"').strip("'") for v in val[1:-1].split(',')]
-            fm[key] = val
+    try:
+        fm = yaml.safe_load(match.group(1))
+    except yaml.YAMLError:
+        return {}
+    if not isinstance(fm, dict):
+        return {}
     return fm
 
 
@@ -131,7 +148,7 @@ def detect_changes(force: bool = False) -> tuple[list[Path], list[Path], list[Pa
     state = load_state()
     current_files = {}
 
-    for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR]:
+    for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR]:
         if not subdir.exists():
             continue
         for md_file in subdir.glob("*.md"):
@@ -167,7 +184,7 @@ def generate_graph() -> dict:
     edges = []
     all_page_ids = set()
 
-    for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR]:
+    for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR]:
         if not subdir.exists():
             continue
         for md_file in subdir.glob("*.md"):
@@ -241,78 +258,107 @@ def generate_graph() -> dict:
 # ============ OpenViking Sync ============
 
 def sync_to_openviking(files: list[Path]) -> bool:
-    """Sync changed files to OpenViking via two-step REST API (temp_upload + add_resource)."""
-    if not OV_API_KEY:
-        print("\u26a0 OPENVIKING_API_KEY not set, skipping sync")
+    """Sync changed files to OpenViking via REST API (temp_upload + add_resource)."""
+    if not OV_BASE_URL:
+        print("⚠ OPENVIKING_ENDPOINT not configured, skipping sync")
         return False
 
     import urllib.request
+    import urllib.error
+    import json as _json
+    import uuid
 
-    auth_headers = {
-        "Authorization": f"Bearer {OV_API_KEY}",
-        "X-OpenViking-Account": OV_ACCOUNT,
-        "X-OpenViking-User": OV_USER,
-    }
+    headers = {"Content-Type": "application/json"}
+    if OV_API_KEY:
+        headers["X-API-Key"] = OV_API_KEY
+    if OV_ACCOUNT:
+        headers["X-OpenViking-Account"] = OV_ACCOUNT
+    if OV_USER:
+        headers["X-OpenViking-User"] = OV_USER
 
-    success_count = 0
+    ok_count = 0
+    fail_count = 0
+
     for filepath in files:
-        print(f"  Syncing {filepath.name} to OpenViking...")
+        print(f"  📤 Importing {filepath.name} to OpenViking...")
         try:
-            # Step 1: temp_upload (multipart/form-data)
-            filename = filepath.name
-            with open(filepath, "r", encoding="utf-8") as f:
-                file_content = f.read().encode("utf-8")
-
-            boundary = "----WikiBrainBoundary7ma4yb4d"
+            # Step 1: temp_upload via multipart/form-data
+            content = filepath.read_bytes()
+            boundary = uuid.uuid4().hex
             body = (
                 f"--{boundary}\r\n"
-                f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
-                f"Content-Type: text/markdown\r\n\r\n"
-            ).encode("utf-8") + file_content + f"\r\n--{boundary}--\r\n".encode("utf-8")
+                f'Content-Disposition: form-data; name="file"; filename="{filepath.name}"\r\n'
+                f"Content-Type: application/octet-stream\r\n\r\n"
+            ).encode() + content + f"\r\n--{boundary}--\r\n".encode()
 
-            upload_url = f"{OV_BASE_URL}/api/v1/resources/temp_upload"
-            upload_req = urllib.request.Request(upload_url, data=body, method="POST", headers={
-                **auth_headers,
-                "Content-Type": f"multipart/form-data; boundary={boundary}",
-            })
+            upload_req = urllib.request.Request(
+                f"{OV_BASE_URL}/api/v1/resources/temp_upload",
+                data=body,
+                headers={
+                    "Content-Type": f"multipart/form-data; boundary={boundary}",
+                    **{k: v for k, v in headers.items() if k != "Content-Type"},
+                },
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(upload_req, timeout=60) as resp:
+                    upload_data = _json.loads(resp.read())
+            except urllib.error.HTTPError as e:
+                err_body = e.read().decode("utf-8", errors="replace")[:200]
+                print(f"    ✗ {filepath.name}: upload failed ({e.code}): {err_body}")
+                fail_count += 1
+                continue
 
-            with urllib.request.urlopen(upload_req, timeout=30) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-                if result.get("status") != "ok":
-                    print(f"    FAIL upload: {result}")
-                    continue
-                temp_file_id = result["result"]["temp_file_id"]
+            # Try both key names (API may use temp_file_id or temp_id)
+            temp_id = upload_data.get("result", {}).get("temp_file_id") or \
+                      upload_data.get("result", {}).get("temp_id")
+            if not temp_id:
+                print(f"    ✗ {filepath.name}: no temp_id in response: {upload_data}")
+                fail_count += 1
+                continue
 
-            # Step 2: add_resource with temp_file_id
-            resource_url = f"{OV_BASE_URL}/api/v1/resources"
-            resource_data = json.dumps({
-                "temp_file_id": temp_file_id,
-                "parent": "viking://resources/wiki/",
-                "wait": False,
-            }).encode("utf-8")
+            # Step 2: add_resource
+            add_payload = _json.dumps({
+                "temp_file_id": temp_id,
+                "reason": "auto_index sync",
+            }).encode()
+            add_req = urllib.request.Request(
+                f"{OV_BASE_URL}/api/v1/resources",
+                data=add_payload,
+                headers=headers,
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(add_req, timeout=60) as resp:
+                    add_data = _json.loads(resp.read())
+            except urllib.error.HTTPError as e:
+                err_body = e.read().decode("utf-8", errors="replace")[:200]
+                print(f"    ✗ {filepath.name}: add_resource failed ({e.code}): {err_body}")
+                fail_count += 1
+                continue
 
-            resource_req = urllib.request.Request(resource_url, data=resource_data, method="POST", headers={
-                **auth_headers,
-                "Content-Type": "application/json",
-            })
+            status = add_data.get("status")
+            if status == "ok":
+                print(f"    ✓ {filepath.name}")
+                _logger.debug("  ✓ %s", filepath.name)
+                ok_count += 1
+            else:
+                err = add_data.get("error", {}).get("message", "unknown")
+                print(f"    ✗ {filepath.name}: {err}")
+                _logger.error("  ✗ %s: %s", filepath.name, err)
+                fail_count += 1
 
-            with urllib.request.urlopen(resource_req, timeout=90) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-                if result.get("status") == "ok":
-                    root_uri = result.get("result", {}).get("root_uri", "")
-                    print(f"    OK {filepath.name} -> {root_uri}")
-                    success_count += 1
-                else:
-                    print(f"    FAIL {filepath.name}: {result}")
-
-        except urllib.error.HTTPError as e:
-            err_body = e.read().decode("utf-8", errors="replace")[:200]
-            print(f"    FAIL {filepath.name}: HTTP {e.code} {err_body}")
         except Exception as e:
-            print(f"    FAIL {filepath.name}: {e}")
+            print(f"    ✗ {filepath.name}: {e}")
+            _logger.error("  ✗ %s: %s", filepath.name, e)
+            fail_count += 1
 
-    print(f"  Synced {success_count}/{len(files)} files")
-    return success_count > 0
+    print(f"  📊 Sync complete: {ok_count} ok, {fail_count} failed")
+    return fail_count == 0
+
+
+# ============ Status Display ============
+
 def show_status(pages_new, pages_modified, pages_deleted):
     """Display wiki indexing status."""
     state = load_state()
@@ -361,6 +407,8 @@ def main():
     force = "--force" in args
     status_only = "--status" in args
 
+    _logger.info("=== auto_index started (sync=%s, force=%s) ===", do_sync, force)
+
     # Detect changes
     pages_new, pages_modified, pages_deleted = detect_changes(force=force)
 
@@ -373,6 +421,7 @@ def main():
     if total_changes > 0 or force:
         print(f"📋 Detected {total_changes} changes "
               f"(+{len(pages_new)} ~{len(pages_modified)} -{len(pages_deleted)})")
+        _logger.info("Detected %d changes: +%d ~%d -%d", total_changes, len(pages_new), len(pages_modified), len(pages_deleted))
 
     # Update Entity Registry if there are changes
     if HAS_REGISTRY and (total_changes > 0 or force):
@@ -382,8 +431,11 @@ def main():
             print(f"   Registry: {result.get('registered', 0)} new, "
                   f"{result.get('updated', 0)} updated, "
                   f"{result.get('skipped', 0)} skipped")
+            _logger.info("Registry: %d new, %d updated, %d skipped",
+                         result.get('registered', 0), result.get('updated', 0), result.get('skipped', 0))
         except Exception as e:
             print(f"   ⚠ Registry update failed: {e}")
+            _logger.error("Registry update failed: %s", e, exc_info=True)
 
     # Always regenerate graph (it's cheap)
     print("🔗 Generating knowledge graph...")
@@ -391,23 +443,31 @@ def main():
     GRAPH_FILE.write_text(json.dumps(graph, ensure_ascii=False, indent=2))
     print(f"   ✓ {graph['metadata']['node_count']} nodes, "
           f"{graph['metadata']['edge_count']} edges → {GRAPH_FILE}")
+    _logger.info("Graph: %d nodes, %d edges", graph['metadata']['node_count'], graph['metadata']['edge_count'])
 
     # Sync to OpenViking if requested
     changed_files = pages_new + pages_modified
+    sync_ok = True
     if do_sync and changed_files:
         print(f"\n📤 Syncing {len(changed_files)} files to OpenViking...")
-        sync_to_openviking(changed_files)
+        _logger.info("Syncing %d files to OpenViking...", len(changed_files))
+        sync_ok = sync_to_openviking(changed_files)
     elif do_sync and not changed_files and not force:
         print("\n✅ No files to sync")
+        _logger.info("No files to sync")
 
-    # Update state
-    state = load_state()
-    for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR]:
-        if not subdir.exists():
-            continue
-        for md_file in subdir.glob("*.md"):
-            state["files"][str(md_file)] = file_hash(md_file)
-    save_state(state)
+    # Update state (only if sync succeeded or no sync requested)
+    if sync_ok:
+        state = load_state()
+        for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR]:
+            if not subdir.exists():
+                continue
+            for md_file in subdir.glob("*.md"):
+                state["files"][str(md_file)] = file_hash(md_file)
+        save_state(state)
+        _logger.info("State saved. last_run=%s", state.get("last_run"))
+    else:
+        _logger.warning("Sync failed, state NOT updated - files will retry next run")
 
     if total_changes == 0 and not force:
         print("✅ Wiki is up to date. No changes needed.")

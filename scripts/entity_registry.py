@@ -7,24 +7,48 @@ Entity Registry Core Module
 import json
 import re
 import os
-import sys
 import uuid
+import time
 import shutil
+import fcntl
+import logging
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
+from contextlib import contextmanager
 
-# === 路径配置 ===
-REGISTRY_PATH = Path(os.environ.get("WIKI_ROOT", str(Path.home() / "wiki"))) / "registry.json"
+# === Logging ===
+logger = logging.getLogger(__name__)
 
-# === 导入 wiki_utils ===
-_wiki_utils_available = False
-try:
-    sys.path.insert(0, str(Path(os.environ.get("WIKI_ROOT", str(Path.home() / "wiki"))) / "scripts"))
-    import wiki_utils
-    _wiki_utils_available = True
-except ImportError:
-    pass
+# === 路径配置（支持 WIKI_ROOT 环境变量，通过 wiki_config 统一管理） ===
+_WIKI_ROOT = Path(os.environ.get("WIKI_ROOT", str(Path.home() / "wiki")))
+REGISTRY_PATH = _WIKI_ROOT / "registry.json"
+LOCK_PATH = REGISTRY_PATH.with_suffix(".lock")
+
+
+# === 文件锁 ===
+
+@contextmanager
+def _registry_lock(timeout: int = 30):
+    """获取 registry.json 的排他锁，防止并发写入。"""
+    LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(LOCK_PATH), os.O_CREAT | os.O_RDWR)
+    try:
+        deadline = datetime.now().timestamp() + timeout
+        while datetime.now().timestamp() < deadline:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                yield fd
+                return
+            except (BlockingIOError, OSError):
+                time.sleep(0.1)
+        raise TimeoutError(f"无法在 {timeout}s 内获取锁: {LOCK_PATH}")
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        except OSError:
+            pass
+        os.close(fd)
 
 
 # === 数据层 ===
@@ -42,19 +66,22 @@ def load_registry() -> dict:
 
 
 def save_registry(reg: dict) -> None:
-    """保存到 registry.json（原子写入：先写.tmp再rename）"""
-    reg["version"] = 1
-    
-    # 确保目录存在
-    REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    
-    tmp_path = REGISTRY_PATH.with_suffix(".tmp")
-    
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(reg, f, ensure_ascii=False, indent=2)
-    
-    # 原子替换
-    tmp_path.rename(REGISTRY_PATH)
+    """保存到 registry.json（原子写入：先写.tmp再rename，加文件锁）"""
+    with _registry_lock():
+        reg["version"] = 1
+        
+        # 确保目录存在
+        REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        
+        tmp_path = REGISTRY_PATH.with_suffix(".tmp")
+        
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(reg, f, ensure_ascii=False, indent=2)
+        
+        # 原子替换
+        tmp_path.rename(REGISTRY_PATH)
+        logger.debug("registry.json 已保存 (entities=%d, aliases=%d)", 
+                     len(reg.get("entities", {})), len(reg.get("alias_index", {})))
 
 
 def _empty_registry() -> dict:
@@ -92,27 +119,19 @@ def normalize_name(name: str) -> str:
     return name
 
 
-def _get_frontmatter(content: str):
-    """
-    提取markdown文件的frontmatter。
-    优先使用 wiki_utils，如果不可用则使用内置实现。
-    """
-    if _wiki_utils_available:
-        return wiki_utils.get_frontmatter(content)
-    
-    # 内置实现
-    match = re.match(r'^---\n(.*?)\n---\n(.*)$', content, re.DOTALL)
+def _get_frontmatter(content: str) -> tuple[dict, str]:
+    """提取markdown文件的frontmatter (YAML)"""
+    import yaml
+    match = re.match(r'^---\s*\n(.*?)\n---\s*\n(.*)$', content, re.DOTALL)
     if match:
         fm_text = match.group(1)
         body = match.group(2)
-        fm = {}
-        for line in fm_text.split('\n'):
-            m = re.match(r'^(\w+):\s*(.*)$', line)
-            if m:
-                key, val = m.group(1), m.group(2)
-                # 解析简单值
-                val = val.strip().strip("'\"")
-                fm[key] = val
+        try:
+            fm = yaml.safe_load(fm_text) or {}
+        except yaml.YAMLError:
+            fm = {}
+        if not isinstance(fm, dict):
+            fm = {}
         return fm, body
     return {}, content
 
@@ -548,7 +567,7 @@ def find_duplicates() -> list:
 def scan_wiki_pages(wiki_root: str = None) -> dict:
     """扫描所有 wiki 页面的 frontmatter，自动注册/更新实体"""
     if wiki_root is None:
-        wiki_root = str(Path(os.environ.get("WIKI_ROOT", str(Path.home() / "wiki"))))
+        wiki_root = str(Path.home() / "wiki")
     
     wiki_path = Path(wiki_root).expanduser()
     

@@ -9,8 +9,27 @@ import os
 import sys
 import re
 import uuid
+import logging
+import signal
 from pathlib import Path
 from datetime import datetime
+
+# ============================================================
+# 0. 日志配置
+# ============================================================
+LOG_DIR = Path(os.environ.get("WIKI_ROOT", str(Path.home() / "wiki"))) / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+_logger = logging.getLogger("wiki-brain")
+_logger.setLevel(logging.DEBUG)
+if not _logger.handlers:
+    _fh = logging.FileHandler(LOG_DIR / "wiki-brain.log", encoding="utf-8")
+    _fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+    _logger.addHandler(_fh)
+    _sh = logging.StreamHandler(sys.stderr)
+    _sh.setLevel(logging.WARNING)
+    _sh.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+_logger.addHandler(_sh)
 from typing import Optional, List, Dict, Any
 
 # ============================================================
@@ -31,9 +50,6 @@ except ImportError:
 # 2. 路径配置
 # ============================================================
 WIKI_ROOT = Path(os.environ.get("WIKI_ROOT", str(Path.home() / "wiki")))
-EXCLUDE_DIRS = {
-    "logs", "scripts", "queries", "comparisons", "raw", "src"
-}
 REGISTRY_FILE = WIKI_ROOT / "registry.json"
 
 # OpenViking API 配置
@@ -42,50 +58,41 @@ OPENVIKING_PORT = int(os.environ.get("OPENVIKING_PORT", "1933"))
 OPENVIKING_URL = f"http://{OPENVIKING_HOST}:{OPENVIKING_PORT}"
 OPENVIKING_API_KEY = os.environ.get("OPENVIKING_API_KEY", "")
 OPENVIKING_ACCOUNT = os.environ.get("OPENVIKING_ACCOUNT", "hermes")
+
+# 页面索引缓存（URI -> wiki 文件路径映射）
+_page_index_cache = {}
+_page_index_built = False
+
+def _build_page_index():
+    """构建 stem -> relative_path 索引，用于 OpenViking URI 到 wiki 文件路径映射。"""
+    global _page_index_cache, _page_index_built
+    if _page_index_built:
+        return _page_index_cache
+    for f in WIKI_ROOT.rglob("*.md"):
+        if f.name in ['SCHEMA.md', 'RESOLVER.md', 'index.md', 'log.md']:
+            continue
+        stem = f.stem.lower().replace('_', '').replace('-', '')
+        _page_index_cache[stem] = str(f.relative_to(WIKI_ROOT))
+    _page_index_built = True
+    return _page_index_cache
+
+def _uri_to_page_path(uri: str) -> str:
+    """将 OpenViking URI 映射回 wiki 文件路径。"""
+    parts = uri.rstrip('/').split('/')
+    filename = parts[-1]
+    # .overview.md 用目录名作为文件名
+    if filename == '.overview.md' or filename.endswith('/.overview.md'):
+        name = parts[-2]
+    else:
+        name = filename.replace('.md', '')
+    key = name.lower().replace('_', '').replace('-', '')
+    return _build_page_index().get(key, "")
 OPENVIKING_USER = os.environ.get("OPENVIKING_USER", "default")
 
-# API Key 认证配置
-MCP_API_KEY = os.environ.get("MCP_API_KEY", "")
-
 # ============================================================
-# 3. 导入 wiki_utils 工具模块
+# 3. 导入 entity_registry 模块
 # ============================================================
 sys.path.insert(0, str(WIKI_ROOT / "scripts"))
-try:
-    import wiki_utils
-except ImportError as e:
-    print(f"警告: 无法导入 wiki_utils 模块: {e}", file=sys.stderr)
-    # 提供内联 stub
-    def _get_frontmatter(content: str):
-        match = re.match(r'^---\n(.*?)\n---\n(.*)$', content, re.DOTALL)
-        if match:
-            fm_text = match.group(1)
-            body = match.group(2)
-            fm = {}
-            for line in fm_text.split('\n'):
-                m = re.match(r'^(\w+):\s*(.*)$', line)
-                if m:
-                    fm[m.group(1)] = m.group(2).strip().strip("'\"")
-            return fm, body
-        return {}, content
-
-    def _update_frontmatter(content: str, updates: dict) -> str:
-        fm, body = _get_frontmatter(content)
-        fm.update(updates)
-        fm_lines = [f"{k}: {v}" for k, v in fm.items()]
-        return f"---\n" + "\n".join(fm_lines) + "\n---\n" + body
-
-    class wiki_utils:
-        get_frontmatter = staticmethod(_get_frontmatter)
-        update_frontmatter = staticmethod(_update_frontmatter)
-        parse_frontmatter = staticmethod(lambda c: _get_frontmatter(c)[0])
-        format_frontmatter = staticmethod(lambda d: "---\n" + "\n".join(f"{k}: {v}" for k, v in d.items()) + "\n---")
-        get_frontmatter_field = staticmethod(lambda c, f: _get_frontmatter(c)[0].get(f, ""))
-        parse_tags = staticmethod(lambda s: [])
-
-# ============================================================
-# 4. 导入 entity_registry 模块
-# ============================================================
 try:
     import entity_registry
 except ImportError as e:
@@ -175,99 +182,39 @@ except ImportError as e:
             return list(reg["entities"].values())
 
 # ============================================================
-# 5. API Key 认证检查
+# 4. 路径安全工具
 # ============================================================
 
-def _check_auth() -> bool:
-    """
-    检查 API Key 认证。
-    如果 MCP_API_KEY 未设置，则跳过认证。
-    通过检查 Authorization header 进行验证。
-    
-    注意: 在 FastMCP StreamableHTTP 模式下，我们需要通过其他方式获取 header。
-    这里通过检查 environ 中的 HTTP_AUTHORIZATION 来获取。
-    """
-    if not MCP_API_KEY:
-        # 未配置 API Key，跳过认证
-        return True
-    
-    # 从环境变量获取 Authorization header（StreamableHTTP 会设置）
-    auth_header = os.environ.get("HTTP_AUTHORIZATION", "")
-    
-    if not auth_header:
-        return False
-    
-    # 解析 "Bearer <key>" 格式
-    if auth_header.startswith("Bearer "):
-        token = auth_header[7:]
-        if token == MCP_API_KEY:
-            return True
-    
-    return False
+# 允许的 wiki 子目录白名单
+_ALLOWED_SUBDIRS = {'concepts', 'entities', 'people', 'projects', 
+                    'meetings', 'ideas', 'comparisons', 'queries', 'tools'}
+# 允许的 entity/page 类型
+_ALLOWED_TYPES = {'person', 'project', 'entity', 'concept', 
+                  'meeting', 'idea', 'comparison', 'query', 'tool'}
 
 
-def _require_auth():
-    """如果认证失败则抛出异常"""
-    if not _check_auth():
-        raise PermissionError("Invalid or missing API Key")
-
-# ============================================================
-# 6. OpenViking 健康检查
-# ============================================================
-
-# OpenViking 状态缓存
-_openviking_healthy = None
-_openviking_check_time = 0
-
-
-def check_openviking_health() -> bool:
-    """
-    检查 OpenViking 服务是否可达。
-    使用简单的 HTTP GET 请求到 health endpoint。
-    缓存结果 30 秒避免频繁检查。
-    
-    Returns:
-        True if OpenViking is reachable, False otherwise
-    """
-    global _openviking_healthy, _openviking_check_time
-    
-    import time
-    current_time = time.time()
-    
-    # 缓存 30 秒
-    if _openviking_healthy is not None and (current_time - _openviking_check_time) < 30:
-        return _openviking_healthy
-    
+def _validate_path(path: Path) -> Path:
+    """验证路径不会逃逸 WIKI_ROOT（防 path traversal）。"""
     try:
-        import urllib.request
-        req = urllib.request.Request(
-            f"{OPENVIKING_URL}/health",
-            method="GET",
-            headers={"Accept": "application/json"}
-        )
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            if resp.status == 200:
-                _openviking_healthy = True
-            else:
-                _openviking_healthy = False
-    except Exception:
-        _openviking_healthy = False
-    
-    _openviking_check_time = current_time
-    return _openviking_healthy
+        resolved = path.resolve()
+        wiki_resolved = WIKI_ROOT.resolve()
+        if not str(resolved).startswith(str(wiki_resolved) + os.sep) and resolved != wiki_resolved:
+            raise ValueError(f"路径越界: {path} 不在 WIKI_ROOT 内")
+        return resolved
+    except (OSError, ValueError) as e:
+        raise ValueError(f"无效路径: {e}")
 
 
-def get_openviking_status() -> Dict[str, Any]:
-    """获取 OpenViking 连通状态详情"""
-    is_healthy = check_openviking_health()
-    return {
-        "reachable": is_healthy,
-        "url": OPENVIKING_URL,
-        "status": "healthy" if is_healthy else "unreachable"
-    }
+def _validate_type(entity_type: str) -> str:
+    """验证 entity/page 类型是否合法。"""
+    normalized = entity_type.lower().strip()
+    if normalized not in _ALLOWED_TYPES:
+        raise ValueError(f"无效类型: '{entity_type}'，允许: {_ALLOWED_TYPES}")
+    return normalized
+
 
 # ============================================================
-# 7. Wiki 工具函数
+# 5. Wiki 工具函数
 # ============================================================
 
 def _slugify(name: str) -> str:
@@ -280,24 +227,24 @@ def _slugify(name: str) -> str:
 
 
 def _resolve_page_path(page_id: str) -> Optional[Path]:
-    """解析 page_id 为完整路径"""
+    """解析 page_id 为完整路径（带路径安全验证）"""
     page_id = page_id.strip()
 
     # 如果已经是完整路径
     if '/' in page_id:
         path = WIKI_ROOT / page_id
         if path.exists():
-            return path
+            return _validate_path(path)
         # 尝试加 .md
         path = WIKI_ROOT / f"{page_id}.md"
         if path.exists():
-            return path
+            return _validate_path(path)
 
     # 搜索所有子目录
-    for subdir in ['concepts', 'entities', 'people', 'projects', 'meetings', 'ideas', 'comparisons', 'queries']:
+    for subdir in ['concepts', 'entities', 'people', 'projects', 'meetings', 'ideas', 'comparisons', 'queries', 'tools']:
         path = WIKI_ROOT / subdir / f"{page_id}.md"
         if path.exists():
-            return path
+            return _validate_path(path)
         # 模糊匹配
         if '-' in page_id or '_' in page_id:
             for f in (WIKI_ROOT / subdir).glob("*"):
@@ -305,21 +252,37 @@ def _resolve_page_path(page_id: str) -> Optional[Path]:
                     return f
 
     # 搜索所有 .md 文件
-    for f in (f for f in WIKI_ROOT.rglob("*.md") if not any(p in f.parts for p in EXCLUDE_DIRS)):
+    for f in WIKI_ROOT.rglob("*.md"):
         if f.stem == page_id or f.stem.replace('-', '') == page_id.replace('-', ''):
             return f
 
     return None
 
 
-def _get_frontmatter(content: str):
-    """兼容性别名，调用 wiki_utils"""
-    return wiki_utils.get_frontmatter(content)
+def _get_frontmatter(content: str) -> tuple[dict, str]:
+    """提取 markdown 文件的 frontmatter (YAML)"""
+    import yaml
+    match = re.match(r'^---\s*\n(.*?)\n---\s*\n(.*)$', content, re.DOTALL)
+    if match:
+        fm_text = match.group(1)
+        body = match.group(2)
+        try:
+            fm = yaml.safe_load(fm_text) or {}
+        except yaml.YAMLError:
+            fm = {}
+        if not isinstance(fm, dict):
+            fm = {}
+        return fm, body
+    return {}, content
 
 
 def _update_frontmatter(content: str, updates: dict) -> str:
-    """兼容性别名，调用 wiki_utils"""
-    return wiki_utils.update_frontmatter(content, updates)
+    """更新 frontmatter 中的指定字段"""
+    import yaml
+    fm, body = _get_frontmatter(content)
+    fm.update(updates)
+    fm_text = yaml.dump(fm, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    return f"---\n{fm_text}---\n{body}"
 
 
 def _get_section_content(body: str, section: str) -> str:
@@ -385,39 +348,54 @@ def _openviking_search(query: str, type_filter: str = "") -> List[Dict]:
     import urllib.request
     import urllib.parse
 
-    # 检查 OpenViking 是否可用
-    openviking_available = check_openviking_health()
-
-    if not openviking_available:
-        # 如果 OpenViking 不可用，直接使用 fallback
-        return _fallback_file_search(query, type_filter)
-
     try:
         url = f"{OPENVIKING_URL}/api/v1/search/search"
-        data = json.dumps({"query": query, "type": type_filter}).encode('utf-8')
+        payload = {"query": query, "limit": 10}
+        if type_filter:
+            payload["type"] = type_filter
+        data = json.dumps(payload).encode('utf-8')
+        headers = {"Content-Type": "application/json"}
+        if OPENVIKING_API_KEY:
+            headers["X-API-Key"] = OPENVIKING_API_KEY
+        if OPENVIKING_ACCOUNT:
+            headers["X-OpenViking-Account"] = OPENVIKING_ACCOUNT
+        if OPENVIKING_USER:
+            headers["X-OpenViking-User"] = OPENVIKING_USER
         req = urllib.request.Request(
             url,
             data=data,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {OPENVIKING_API_KEY}",
-                "X-OpenViking-Account": OPENVIKING_ACCOUNT,
-                "X-OpenViking-User": OPENVIKING_USER,
-            },
+            headers=headers,
             method="POST"
         )
 
         with urllib.request.urlopen(req, timeout=10) as resp:
             result = json.loads(resp.read().decode('utf-8'))
-            resources = result.get("result", {}).get("resources", [])
-            return [{
-                "uri": r.get("uri", ""),
-                "abstract": r.get("abstract", ""),
-                "score": r.get("score", 0)
-            } for r in resources]
+            # Parse OpenViking v1 response format
+            if result.get("status") == "ok":
+                items = []
+                for r in (result.get("result", {}).get("resources") or []):
+                    uri = r.get("uri", "")
+                    # 从 URI 提取 title: viking://resources/<name>/<file>
+                    parts = uri.rstrip("/").split("/")
+                    title = parts[-2] if len(parts) >= 2 else parts[-1]
+                    title = title.replace("_", " ")
+                    page_path = _uri_to_page_path(uri)
+                    items.append({
+                        "title": title,
+                        "type": "",
+                        "page_path": page_path,
+                        "summary": r.get("abstract", ""),
+                    })
+                _logger.info("openviking_search: query=%r type=%r → %d results", query, type_filter, len(items))
+                return items
+            else:
+                err = result.get("error", {})
+                _logger.warning("openviking_search: query=%r → error: %s", query, err.get("message", result))
+            return []
 
     except Exception as e:
-        # 如果 OpenViking 调用失败，fallback 到文件搜索
+        _logger.warning("openviking_search: query=%r → fallback (%s: %s)", query, type(e).__name__, e)
+        # 如果 OpenViking 不可用，fallback 到文件搜索
         return _fallback_file_search(query, type_filter)
 
 
@@ -426,14 +404,14 @@ def _fallback_file_search(query: str, type_filter: str = "") -> List[Dict]:
     results = []
     query_lower = query.lower()
 
-    for md_file in (md_file for md_file in WIKI_ROOT.rglob("*.md") if not any(p in md_file.parts for p in EXCLUDE_DIRS)):
+    for md_file in WIKI_ROOT.rglob("*.md"):
         # 跳过非内容文件
         if md_file.name in ['SCHEMA.md', 'RESOLVER.md', 'index.md', 'log.md']:
             continue
 
         try:
             content = md_file.read_text(encoding='utf-8')
-            fm, body = wiki_utils.get_frontmatter(content)
+            fm, body = _get_frontmatter(content)
 
             # 类型过滤
             if type_filter and fm.get('type') != type_filter:
@@ -446,8 +424,7 @@ def _fallback_file_search(query: str, type_filter: str = "") -> List[Dict]:
                     "title": fm.get('title', md_file.stem),
                     "type": fm.get('type', 'unknown'),
                     "page_path": str(rel_path),
-                    "summary": body[:200].replace('\n', ' ').strip() if body else "",
-                    "fallback_mode": True
+                    "summary": body[:200].replace('\n', ' ').strip() if body else ""
                 })
         except Exception:
             continue
@@ -456,25 +433,13 @@ def _fallback_file_search(query: str, type_filter: str = "") -> List[Dict]:
 
 
 # ============================================================
-# 8. 创建 FastMCP Server
+# 5. 创建 FastMCP Server
 # ============================================================
-# Patch: Set session_idle_timeout BEFORE FastMCP() constructor creates the session manager
-import mcp.server.streamable_http_manager as _shm
-import mcp.server.fastmcp.server as _fm
-_orig_shm_cls = _shm.StreamableHTTPSessionManager
-class _PatchedSHM(_orig_shm_cls):
-    def __init__(self, *args, **kwargs):
-        kwargs.setdefault("session_idle_timeout", 86400)  # 24 hours
-        super().__init__(*args, **kwargs)
-# Patch BOTH modules (streamable_http_manager + fastmcp.server local import)
-_shm.StreamableHTTPSessionManager = _PatchedSHM
-_fm.StreamableHTTPSessionManager = _PatchedSHM
-
 mcp = FastMCP("wiki-brain", host="0.0.0.0", port=int(os.environ.get("MCP_PORT", "8764")))
 
 
 # ============================================================
-# 9. Wiki 操作 Tools
+# 6. Wiki 操作 Tools
 # ============================================================
 
 @mcp.tool()
@@ -482,21 +447,9 @@ def wiki_search(query: str, type: str = "") -> List[Dict]:
     """
     语义搜索 wiki 页面。
     调用 OpenViking search API，支持按 type 过滤。
-    如果 OpenViking 不可用，自动使用 fallback 文件搜索。
-    返回 [{title, type, page_path, summary, fallback_mode}]
+    返回 [{title, type, page_path, summary}]
     """
-    # 认证检查
-    _require_auth()
-    
     results = _openviking_search(query, type)
-    
-    # 如果使用 fallback，添加标注
-    openviking_ok = check_openviking_health()
-    if not openviking_ok:
-        for r in results:
-            r["fallback_mode"] = True
-            r["message"] = "(fallback mode - OpenViking unavailable)"
-    
     return results
 
 
@@ -507,15 +460,12 @@ def wiki_get(page_id: str) -> Dict:
     page_id 可以是文件名（如 "hermes-agent"）或完整路径。
     返回 {title, type, frontmatter, executive_summary, key_facts, relations, timeline}
     """
-    # 认证检查
-    _require_auth()
-    
     path = _resolve_page_path(page_id)
     if not path:
         raise ValueError(f"页面未找到: {page_id}")
 
     content = path.read_text(encoding='utf-8')
-    fm, body = wiki_utils.get_frontmatter(content)
+    fm, body = _get_frontmatter(content)
 
     # 提取各 section
     summary = _get_section_content(body, "Executive Summary")
@@ -544,8 +494,12 @@ def wiki_create(name: str, type: str, description: str, content: str = "") -> Di
     自动注册到 Entity Registry。
     返回 {page_path, entity_id}
     """
-    # 认证检查
-    _require_auth()
+    # 验证 type
+    type = _validate_type(type)
+    
+    # 内容长度限制 (1MB)
+    if len(description) > 500_000 or len(content) > 1_000_000:
+        raise ValueError("内容过长，description 最大 500KB，content 最大 1MB")
     
     # 确定目录
     type_dir_map = {
@@ -556,7 +510,8 @@ def wiki_create(name: str, type: str, description: str, content: str = "") -> Di
         "meeting": "meetings",
         "idea": "ideas",
         "comparison": "comparisons",
-        "query": "queries"
+        "query": "queries",
+        "tool": "tools"
     }
 
     subdir = type_dir_map.get(type.lower(), "concepts")
@@ -630,15 +585,12 @@ def wiki_update(page_id: str, section: str, content: str) -> Dict:
     Timeline section 自动 append，不覆盖。
     返回 {page_path, updated_sections}
     """
-    # 认证检查
-    _require_auth()
-    
     path = _resolve_page_path(page_id)
     if not path:
         raise ValueError(f"页面未找到: {page_id}")
 
     original = path.read_text(encoding='utf-8')
-    fm, body = wiki_utils.get_frontmatter(original)
+    fm, body = _get_frontmatter(original)
 
     # 更新 body 中的 section
     if section.lower() == "timeline":
@@ -655,7 +607,9 @@ def wiki_update(page_id: str, section: str, content: str) -> Dict:
     fm['updated'] = datetime.now().strftime("%Y-%m-%d")
 
     # 重新组装
-    new_content = wiki_utils.format_frontmatter(fm) + "\n" + body
+    import yaml
+    fm_text = yaml.dump(fm, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    new_content = f"---\n{fm_text}---\n{body}"
 
     path.write_text(new_content, encoding='utf-8')
 
@@ -675,15 +629,12 @@ def wiki_append_timeline(page_id: str, event: str, source: str = "") -> Dict:
     更新 frontmatter updated 日期。
     返回 {page_path, timeline_entry}
     """
-    # 认证检查
-    _require_auth()
-    
     path = _resolve_page_path(page_id)
     if not path:
         raise ValueError(f"页面未找到: {page_id}")
 
     original = path.read_text(encoding='utf-8')
-    fm, body = wiki_utils.get_frontmatter(original)
+    fm, body = _get_frontmatter(original)
 
     # 格式化 timeline 条目
     now = datetime.now().strftime("%Y-%m-%d")
@@ -717,7 +668,9 @@ def wiki_append_timeline(page_id: str, event: str, source: str = "") -> Dict:
     fm['updated'] = now
 
     # 重新组装
-    new_content = wiki_utils.format_frontmatter(fm) + "\n" + body
+    import yaml
+    fm_text = yaml.dump(fm, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    new_content = f"---\n{fm_text}---\n{body}"
 
     path.write_text(new_content, encoding='utf-8')
 
@@ -735,19 +688,16 @@ def wiki_list(type: str = "", status: str = "") -> List[Dict]:
     可选按 type 和 status 过滤。
     返回 [{id, title, type, status, updated}]
     """
-    # 认证检查
-    _require_auth()
-    
     pages = []
 
-    for md_file in (md_file for md_file in WIKI_ROOT.rglob("*.md") if not any(p in md_file.parts for p in EXCLUDE_DIRS)):
+    for md_file in WIKI_ROOT.rglob("*.md"):
         # 跳过非内容文件
         if md_file.name in ['SCHEMA.md', 'RESOLVER.md', 'index.md', 'log.md']:
             continue
 
         try:
             content = md_file.read_text(encoding='utf-8')
-            fm, _ = wiki_utils.get_frontmatter(content)
+            fm, _ = _get_frontmatter(content)
 
             # 类型过滤
             if type and fm.get('type') != type:
@@ -765,14 +715,15 @@ def wiki_list(type: str = "", status: str = "") -> List[Dict]:
                 "updated": fm.get('updated', ''),
                 "page_path": str(md_file.relative_to(WIKI_ROOT))
             })
-        except Exception:
+        except Exception as e:
+            _logger.debug("wiki_list: 跳过文件 %s: %s", md_file.name, e)
             continue
 
     return pages
 
 
 # ============================================================
-# 10. Entity Registry Tools
+# 7. Entity Registry Tools
 # ============================================================
 
 @mcp.tool()
@@ -781,9 +732,6 @@ def entity_resolve(name: str) -> Optional[Dict]:
     通过名称或别名解析实体。
     返回 {id, canonical_name, aliases, type, primary_page}
     """
-    # 认证检查
-    _require_auth()
-    
     entity = entity_registry.resolve(name)
     if entity:
         return {
@@ -802,9 +750,7 @@ def entity_register(name: str, type: str, aliases: List[str] = None) -> Dict:
     注册新实体。
     返回 {id, canonical_name, aliases}
     """
-    # 认证检查
-    _require_auth()
-    
+    type = _validate_type(type)
     entity = entity_registry.register(
         name=name,
         entity_type=type,
@@ -824,9 +770,6 @@ def entity_list(type: str = "") -> List[Dict]:
     可选按 type 过滤。
     返回实体列表。
     """
-    # 认证检查
-    _require_auth()
-    
     entities = entity_registry.get_all_entities()
     if type:
         entities = [e for e in entities if e.get("type") == type]
@@ -851,9 +794,6 @@ def entity_merge(id1: str, id2: str) -> Dict:
     id1 被合并到 id2，id1 删除。
     返回合并结果。
     """
-    # 认证检查
-    _require_auth()
-    
     success = entity_registry.merge(id1, id2)
     if success:
         return {
@@ -870,55 +810,160 @@ def entity_merge(id1: str, id2: str) -> Dict:
 
 
 # ============================================================
-# 11. 系统 Tool
+# 8. 系统 Tool
 # ============================================================
 
 @mcp.tool()
 def wiki_stats() -> Dict:
     """
     返回 wiki 统计：总页面数、各类型数量、registry 统计等。
-    包含 OpenViking 连通状态。
     """
-    # 认证检查
-    _require_auth()
-    
     # 统计页面
     page_counts = {}
     total_pages = 0
 
-    for md_file in (md_file for md_file in WIKI_ROOT.rglob("*.md") if not any(p in md_file.parts for p in EXCLUDE_DIRS)):
+    for md_file in WIKI_ROOT.rglob("*.md"):
         if md_file.name in ['SCHEMA.md', 'RESOLVER.md', 'index.md', 'log.md']:
             continue
         total_pages += 1
 
         try:
             content = md_file.read_text(encoding='utf-8')
-            fm, _ = wiki_utils.get_frontmatter(content)
+            fm, _ = _get_frontmatter(content)
             ptype = fm.get('type', 'unknown')
             page_counts[ptype] = page_counts.get(ptype, 0) + 1
-        except Exception:
+        except Exception as e:
+            _logger.debug("wiki_stats: 跳过文件 %s: %s", md_file.name, e)
             continue
 
     # Registry 统计
     reg = entity_registry.load_registry()
     reg_stats = reg.get("stats", {})
 
-    # OpenViking 状态
-    openviking_status = get_openviking_status()
-
     return {
         "total_pages": total_pages,
         "pages_by_type": page_counts,
         "total_entities": reg_stats.get("total_entities", 0),
         "total_aliases": reg_stats.get("total_aliases", 0),
-        "registry_version": reg.get("version", 1),
-        "openviking": openviking_status
+        "registry_version": reg.get("version", 1)
     }
 
 
 # ============================================================
-# 12. 启动 Server
+# 8.5 Health Check
 # ============================================================
 
+@mcp.tool()
+def wiki_health() -> Dict:
+    """
+    健康检查：验证 wiki 核心依赖状态。
+    返回 {status, checks: [{name, status, message}]}
+    """
+    import time
+    checks = []
+
+    # 1. Registry 文件完整性
+    try:
+        if REGISTRY_FILE.exists():
+            with open(REGISTRY_FILE, "r", encoding="utf-8") as f:
+                json.load(f)  # 验证 JSON
+            checks.append({"name": "registry", "status": "ok", "message": "registry.json 完整"})
+        else:
+            checks.append({"name": "registry", "status": "ok", "message": "registry.json 不存在（将首次创建）"})
+    except (json.JSONDecodeError, IOError) as e:
+        checks.append({"name": "registry", "status": "error", "message": f"registry.json 损坏: {e}"})
+
+    # 2. Wiki 目录可写
+    try:
+        test_file = WIKI_ROOT / ".health_check_tmp"
+        test_file.write_text("ok", encoding="utf-8")
+        test_file.unlink()
+        checks.append({"name": "disk_writable", "status": "ok", "message": f"可写: {WIKI_ROOT}"})
+    except Exception as e:
+        checks.append({"name": "disk_writable", "status": "error", "message": str(e)})
+
+    # 3. 磁盘空间
+    try:
+        stat = os.statvfs(str(WIKI_ROOT))
+        free_pct = (stat.f_bavail / stat.f_blocks) * 100
+        if free_pct < 10:
+            checks.append({"name": "disk_space", "status": "warning", 
+                          "message": f"磁盘空间不足: {free_pct:.1f}% 可用"})
+        else:
+            checks.append({"name": "disk_space", "status": "ok", 
+                          "message": f"磁盘空间充足: {free_pct:.1f}% 可用"})
+    except Exception as e:
+        checks.append({"name": "disk_space", "status": "error", "message": str(e)})
+
+    # 4. OpenViking 连通性
+    try:
+        import urllib.request
+        start = time.time()
+        req = urllib.request.Request(
+            f"{OPENVIKING_URL}/health",
+            method="GET",
+            headers={"Accept": "application/json"}
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            if resp.status == 200:
+                ms = (time.time() - start) * 1000
+                checks.append({"name": "openviking", "status": "ok", 
+                              "message": f"OpenViking 可达 ({ms:.0f}ms)"})
+            else:
+                checks.append({"name": "openviking", "status": "warning", 
+                              "message": f"OpenViking 返回 {resp.status}"})
+    except Exception as e:
+        checks.append({"name": "openviking", "status": "degraded", 
+                      "message": f"OpenViking 不可达: {type(e).__name__}"})
+
+    # 5. 页面文件数
+    try:
+        page_count = sum(1 for f in WIKI_ROOT.rglob("*.md") 
+                        if f.name not in ['SCHEMA.md', 'RESOLVER.md', 'index.md', 'log.md'])
+        checks.append({"name": "pages", "status": "ok", 
+                      "message": f"{page_count} 个 wiki 页面"})
+    except Exception as e:
+        checks.append({"name": "pages", "status": "error", "message": str(e)})
+
+    # 汇总状态
+    statuses = [c["status"] for c in checks]
+    if "error" in statuses:
+        overall = "unhealthy"
+    elif "warning" in statuses or "degraded" in statuses:
+        overall = "degraded"
+    else:
+        overall = "healthy"
+
+    return {
+        "status": overall,
+        "timestamp": datetime.now().isoformat(),
+        "checks": checks
+    }
+
+
+# ============================================================
+# 9. Graceful Shutdown
+# ============================================================
+_shutdown_requested = False
+
+def _signal_handler(signum, frame):
+    """处理 SIGTERM/SIGINT，确保 in-flight 写入完成。"""
+    global _shutdown_requested
+    if _shutdown_requested:
+        _logger.warning("收到重复关闭信号 (%s)，强制退出", signum)
+        sys.exit(1)
+    _shutdown_requested = True
+    _logger.info("收到信号 %s，优雅关闭中...", signum)
+    # FastMCP 的 uvicorn 会在下一次循环检测到 shutdown 标志后自动退出
+    sys.exit(0)
+
+
+# ============================================================
+# 10. 启动 Server
+# ============================================================
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, _signal_handler)
+    signal.signal(signal.SIGINT, _signal_handler)
+    _logger.info("Wiki Brain MCP Server 启动 (WIKI_ROOT=%s, port=%s)", 
+                WIKI_ROOT, os.environ.get("MCP_PORT", "8764"))
     mcp.run(transport="streamable-http")
