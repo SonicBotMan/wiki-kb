@@ -100,27 +100,22 @@ Wiki KB 是一个标准 MCP Server。任何支持 MCP 的 Agent（Claude Desktop
 
 ## 架构概览
 
-```
-┌──────────────────────────────────────────────────────────┐
-│                    AI Agent (Client)                      │
-│  (Claude / GPT / GLM / 任何支持 MCP 的 Agent)            │
-└──────────────┬───────────────────────────────────────────┘
-               │ MCP StreamableHTTP
-               ▼
-┌──────────────────────────────────────────────────────────┐
-│              Wiki KB MCP Server (:8764)                   │
-│  ┌─────────────┐ ┌──────────────┐ ┌───────────────────┐ │
-│  │ Wiki CRUD   │ │ Entity Reg   │ │ Search (fallback) │ │
-│  │ 11 tools    │ │ 5 tools      │ │ + OpenViking opt  │ │
-│  └──────┬──────┘ └──────┬───────┘ └────────┬──────────┘ │
-│         └────────┬──────┘                   │            │
-│                  ▼                          ▼            │
-│         ┌─────────────┐           ┌─────────────────┐   │
-│         │ Markdown    │           │  OpenViking API │   │
-│         │ 文件系统     │           │  (可选)         │   │
-│         └─────────────┘           └─────────────────┘   │
-└──────────────────────────────────────────────────────────┘
-```
+### 在 Agent 记忆系统中的位置
+
+Wiki-KB 是 Agent 记忆系统中的**结构化长期记忆层**，与 Persistent Memory、OpenViking、Skills 协同工作：
+
+![Memory System Landscape](docs/images/memory-system-landscape.png)
+
+**数据流转**：
+1. 对话中产生知识 → Agent 通过 MCP 调用 `wiki_create` / `wiki_update` 写入 Wiki
+2. Cron 定时 → `memory_to_wiki.py` 从 OpenViking 提取记忆回写 Wiki
+3. Cron 定时 → `dream_cycle.py` 用 LLM 审计 Wiki 质量
+4. `auto_index.py` → 将 Wiki 页面同步到 OpenViking（语义搜索）
+5. 人类随时 → 直接编辑 `.md` 文件
+
+### 项目内部架构
+
+![Wiki-KB Internal Architecture](docs/images/wiki-kb-internal-architecture.png)
 
 ## 快速开始
 
