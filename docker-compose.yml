@@ -1,15 +1,19 @@
 services:
-  wiki-kb:
+  wiki-brain:
     build: .
-    container_name: wiki-kb
+    container_name: wiki-brain
     restart: unless-stopped
     ports:
       - "0.0.0.0:8764:8764"
     volumes:
       - ./wiki:/data
+      - ./scripts:/app/scripts
       - ./.env:/app/.env:ro
     env_file:
       - .env
+    environment:
+      - PYTHONPATH=/app/scripts
+      - PYTHONUNBUFFERED=1
     deploy:
       resources:
         limits:
@@ -22,3 +26,8 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.settimeout(2); s.connect(('localhost',8764)); s.close(); print('ok')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

@@ -41,7 +41,7 @@ except ImportError:
 
 # ============ Configuration ============
 WIKI_ROOT = Path(os.environ.get("WIKI_ROOT", str(Path.home() / "wiki")))
-REPORT_DIR = WIKI_ROOT / "logs" / "dream-reports"
+REPORT_DIR = WIKI_ROOT / "dream-reports"
 CONCEPTS_DIR = WIKI_ROOT / "concepts"
 ENTITIES_DIR = WIKI_ROOT / "entities"
 PEOPLE_DIR = WIKI_ROOT / "people"
