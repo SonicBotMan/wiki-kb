@@ -43,14 +43,18 @@ if not _logger.handlers:
     _sh.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
     _logger.addHandler(_sh)
 
-# Entity Registry integration
-import sys
+# Entity Registry + 共享工具
 sys.path.insert(0, str(Path(__file__).parent))
 try:
     import entity_registry as er
     HAS_REGISTRY = True
 except ImportError:
     HAS_REGISTRY = False
+
+try:
+    from wiki_utils import get_frontmatter
+except ImportError:
+    get_frontmatter = None
 
 # ============ Configuration ============
 WIKI_ROOT = Path(os.environ.get("WIKI_ROOT", str(Path.home() / "wiki")))
@@ -60,6 +64,9 @@ PEOPLE_DIR = WIKI_ROOT / "people"
 PROJECTS_DIR = WIKI_ROOT / "projects"
 MEETINGS_DIR = WIKI_ROOT / "meetings"
 IDEAS_DIR = WIKI_ROOT / "ideas"
+COMPARISONS_DIR = WIKI_ROOT / "comparisons"
+QUERIES_DIR = WIKI_ROOT / "queries"
+TOOLS_DIR = WIKI_ROOT / "tools"
 GRAPH_FILE = WIKI_ROOT / "graph.json"
 STATE_FILE = WIKI_ROOT / ".auto_index_state.json"
 # OpenViking config (REST API — no CLI needed)
@@ -71,21 +78,25 @@ OV_API_KEY = os.environ.get("OPENVIKING_API_KEY", "")
 
 # ============ Wiki Parser ============
 
-def parse_frontmatter(content: str) -> dict:
-    """Extract YAML frontmatter."""
-    match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
-    if not match:
-        return {}
-    fm = {}
-    for line in match.group(1).split('\n'):
-        if ':' in line:
-            key, _, val = line.partition(':')
-            key = key.strip()
-            val = val.strip().strip('"').strip("'")
-            if val.startswith('[') and val.endswith(']'):
-                val = [v.strip().strip('"').strip("'") for v in val[1:-1].split(',')]
-            fm[key] = val
-    return fm
+if get_frontmatter is not None:
+    def parse_frontmatter(content: str) -> dict:
+        """Extract YAML frontmatter using shared wiki_utils."""
+        fm, _ = get_frontmatter(content)
+        return fm
+else:
+    def parse_frontmatter(content: str) -> dict:
+        """Extract YAML frontmatter from markdown using PyYAML (fallback)."""
+        import yaml
+        match = re.match(r'^---\s*\n(.*?)\n---\s*\n(.*)$', content, re.DOTALL)
+        if not match:
+            return {}
+        try:
+            fm = yaml.safe_load(match.group(1))
+        except yaml.YAMLError:
+            return {}
+        if not isinstance(fm, dict):
+            return {}
+        return fm
 
 
 def parse_relations(content: str) -> list[dict]:
@@ -147,7 +158,7 @@ def detect_changes(force: bool = False) -> tuple[list[Path], list[Path], list[Pa
     state = load_state()
     current_files = {}
 
-    for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR]:
+    for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR]:
         if not subdir.exists():
             continue
         for md_file in subdir.glob("*.md"):
@@ -183,7 +194,7 @@ def generate_graph() -> dict:
     edges = []
     all_page_ids = set()
 
-    for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR]:
+    for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR]:
         if not subdir.exists():
             continue
         for md_file in subdir.glob("*.md"):
@@ -226,7 +237,7 @@ def generate_graph() -> dict:
                 relations = parse_relations(content)
                 for rel in relations:
                     target = rel["target"]
-                    if target in all_page_ids or True:  # include all, validate later
+                    if target in all_page_ids:
                         edges.append({
                             "source": page_id,
                             "target": target,
@@ -446,23 +457,27 @@ def main():
 
     # Sync to OpenViking if requested
     changed_files = pages_new + pages_modified
+    sync_ok = True
     if do_sync and changed_files:
         print(f"\n📤 Syncing {len(changed_files)} files to OpenViking...")
         _logger.info("Syncing %d files to OpenViking...", len(changed_files))
-        sync_to_openviking(changed_files)
+        sync_ok = sync_to_openviking(changed_files)
     elif do_sync and not changed_files and not force:
         print("\n✅ No files to sync")
         _logger.info("No files to sync")
 
-    # Update state
-    state = load_state()
-    for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR]:
-        if not subdir.exists():
-            continue
-        for md_file in subdir.glob("*.md"):
-            state["files"][str(md_file)] = file_hash(md_file)
-    save_state(state)
-    _logger.info("State saved. last_run=%s", state.get("last_run"))
+    # Update state (only if sync succeeded or no sync requested)
+    if sync_ok:
+        state = load_state()
+        for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR]:
+            if not subdir.exists():
+                continue
+            for md_file in subdir.glob("*.md"):
+                state["files"][str(md_file)] = file_hash(md_file)
+        save_state(state)
+        _logger.info("State saved. last_run=%s", state.get("last_run"))
+    else:
+        _logger.warning("Sync failed, state NOT updated - files will retry next run")
 
     if total_changes == 0 and not force:
         print("✅ Wiki is up to date. No changes needed.")

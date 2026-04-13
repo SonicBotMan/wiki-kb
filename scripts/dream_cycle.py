@@ -33,6 +33,8 @@ from typing import Optional
 
 # Entity Registry integration
 sys.path.insert(0, str(Path(__file__).parent))
+
+# 共享工具函数
 try:
     from wiki_utils import get_frontmatter as parse_frontmatter, parse_relations_table as parse_relations
 except ImportError:
@@ -74,6 +76,9 @@ except ImportError:
                         "note": parts[3] if len(parts) > 3 else ""
                     })
         return relations
+
+# Entity Registry（独立 try/except）
+try:
     import entity_registry as er
     HAS_REGISTRY = True
 except ImportError:
