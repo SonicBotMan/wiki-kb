@@ -1,0 +1,211 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 680" width="960" height="680" font-family="system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="a-blue" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,3.5 L0,7 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="a-green" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,3.5 L0,7 Z" fill="#059669"/>
+    </marker>
+    <marker id="a-orange" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,3.5 L0,7 Z" fill="#ea580c"/>
+    </marker>
+    <marker id="a-purple" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,3.5 L0,7 Z" fill="#7c3aed"/>
+    </marker>
+    <marker id="a-gray" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,3.5 L0,7 Z" fill="#6b7280"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="960" height="680" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="40" y="36" font-size="20" font-weight="600" fill="#0f172a">Wiki-KB Internal Architecture</text>
+  <text x="40" y="54" font-size="12" fill="#6b7280">MCP Server Components, Data Flow, and Storage Layout</text>
+
+  <!-- ===== TOP: MCP Client Layer ===== -->
+  <rect x="320" y="72" width="320" height="40" rx="20" fill="#f9fafb" stroke="#d1d5db" stroke-width="1.5"/>
+  <text x="480" y="96" text-anchor="middle" font-size="14" fill="#374151" font-weight="500">MCP Client (AI Agent)</text>
+
+  <!-- Arrow: Client → Server -->
+  <line x1="480" y1="112" x2="480" y2="142" stroke="#2563eb" stroke-width="2" marker-end="url(#a-blue)"/>
+  <text x="492" y="132" font-size="10" fill="#2563eb">StreamableHTTP</text>
+  <text x="492" y="144" font-size="10" fill="#2563eb">:8764</text>
+
+  <!-- ===== MCP SERVER BOX ===== -->
+  <rect x="40" y="148" width="880" height="280" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+  <rect x="40" y="148" width="880" height="28" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+  <rect x="40" y="168" width="880" height="8" fill="#dbeafe"/>
+  <text x="60" y="168" font-size="13" fill="#1e40af" font-weight="600">Wiki-KB MCP Server (FastMCP)</text>
+  <text x="830" y="168" font-size="11" fill="#3b82f6">wiki_mcp_server.py</text>
+
+  <!-- ===== 3 Tool Groups inside MCP Server ===== -->
+
+  <!-- Wiki CRUD Tools -->
+  <g id="tools-wiki">
+    <rect x="60" y="192" width="260" height="220" rx="6" fill="#ffffff" stroke="#93c5fd" stroke-width="1"/>
+    <text x="80" y="212" font-size="11" font-weight="600" fill="#1e40af">Wiki Operations (6 tools)</text>
+
+    <rect x="76" y="224" width="228" height="26" rx="4" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
+    <text x="190" y="241" text-anchor="middle" font-size="11" fill="#374151">wiki_search(query, type)</text>
+
+    <rect x="76" y="258" width="228" height="26" rx="4" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
+    <text x="190" y="275" text-anchor="middle" font-size="11" fill="#374151">wiki_get(page_id)</text>
+
+    <rect x="76" y="292" width="228" height="26" rx="4" fill="#f0fdf4" stroke="#86efac" stroke-width="1"/>
+    <text x="190" y="309" text-anchor="middle" font-size="11" fill="#166534" font-weight="500">wiki_create(name, type, ...)</text>
+
+    <rect x="76" y="326" width="228" height="26" rx="4" fill="#f0fdf4" stroke="#86efac" stroke-width="1"/>
+    <text x="190" y="343" text-anchor="middle" font-size="11" fill="#166534" font-weight="500">wiki_update(page_id, section)</text>
+
+    <rect x="76" y="360" width="228" height="26" rx="4" fill="#f0fdf4" stroke="#86efac" stroke-width="1"/>
+    <text x="190" y="377" text-anchor="middle" font-size="11" fill="#166534" font-weight="500">wiki_append_timeline(event)</text>
+
+    <rect x="76" y="394" width="228" height="26" rx="4" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
+    <text x="190" y="411" text-anchor="middle" font-size="11" fill="#374151">wiki_list(type, status)</text>
+  </g>
+
+  <!-- Entity Registry Tools -->
+  <g id="tools-entity">
+    <rect x="348" y="192" width="260" height="220" rx="6" fill="#ffffff" stroke="#93c5fd" stroke-width="1"/>
+    <text x="368" y="212" font-size="11" font-weight="600" fill="#1e40af">Entity Registry (4 tools)</text>
+
+    <rect x="364" y="224" width="228" height="26" rx="4" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
+    <text x="478" y="241" text-anchor="middle" font-size="11" fill="#374151">entity_resolve(name)</text>
+
+    <rect x="364" y="258" width="228" height="26" rx="4" fill="#f0fdf4" stroke="#86efac" stroke-width="1"/>
+    <text x="478" y="275" text-anchor="middle" font-size="11" fill="#166534" font-weight="500">entity_register(name, type)</text>
+
+    <rect x="364" y="292" width="228" height="26" rx="4" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
+    <text x="478" y="309" text-anchor="middle" font-size="11" fill="#374151">entity_list(type)</text>
+
+    <rect x="364" y="326" width="228" height="26" rx="4" fill="#fef3c7" stroke="#fcd34d" stroke-width="1"/>
+    <text x="478" y="343" text-anchor="middle" font-size="11" fill="#92400e" font-weight="500">entity_merge(id1, id2)</text>
+
+    <!-- Registry description -->
+    <text x="378" y="376" font-size="10" fill="#6b7280">registry.json — unique IDs,</text>
+    <text x="378" y="390" font-size="10" fill="#6b7280">alias resolution, fuzzy match,</text>
+    <text x="378" y="404" font-size="10" fill="#6b7280">dedup detection (0.6+ similarity)</text>
+  </g>
+
+  <!-- Search + System Tools -->
+  <g id="tools-system">
+    <rect x="636" y="192" width="264" height="220" rx="6" fill="#ffffff" stroke="#93c5fd" stroke-width="1"/>
+    <text x="656" y="212" font-size="11" font-weight="600" fill="#1e40af">Search &amp; System (2 tools)</text>
+
+    <!-- Search -->
+    <rect x="652" y="224" width="232" height="44" rx="4" fill="#faf5ff" stroke="#d8b4fe" stroke-width="1"/>
+    <text x="768" y="243" text-anchor="middle" font-size="11" fill="#6b21a8" font-weight="500">wiki_search()</text>
+    <text x="768" y="259" text-anchor="middle" font-size="10" fill="#7c3aed">OpenViking → fallback file search</text>
+
+    <!-- Stats -->
+    <rect x="652" y="278" width="232" height="30" rx="4" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
+    <text x="768" y="297" text-anchor="middle" font-size="11" fill="#374151">wiki_stats()</text>
+
+    <!-- Internal modules -->
+    <text x="672" y="336" font-size="10" fill="#6b7280" font-weight="500">Internal Modules:</text>
+    <text x="672" y="354" font-size="10" fill="#374151">wiki_utils.py — frontmatter</text>
+    <text x="672" y="370" font-size="10" fill="#374151">entity_registry.py — registry</text>
+    <text x="672" y="386" font-size="10" fill="#374151">Auth check — optional API key</text>
+    <text x="672" y="402" font-size="10" fill="#374151">Session timeout — 24h</text>
+  </g>
+
+  <!-- ===== STORAGE LAYER ===== -->
+  <rect x="40" y="458" width="880" height="142" rx="8" fill="#f0fdf4" stroke="#059669" stroke-width="1.5"/>
+  <text x="60" y="478" font-size="12" fill="#166534" font-weight="600" letter-spacing="0.05em">STORAGE (bind mount: ./wiki → /data)</text>
+
+  <!-- Wiki Pages -->
+  <g id="storage-pages">
+    <rect x="60" y="492" width="300" height="92" rx="6" fill="#ffffff" stroke="#86efac" stroke-width="1"/>
+    <text x="80" y="510" font-size="11" font-weight="500" fill="#166534">Markdown Pages</text>
+    <!-- Directory boxes -->
+    <rect x="76" y="520" width="60" height="22" rx="3" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
+    <text x="106" y="535" text-anchor="middle" font-size="9" fill="#374151">entities/</text>
+    <rect x="142" y="520" width="60" height="22" rx="3" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
+    <text x="172" y="535" text-anchor="middle" font-size="9" fill="#374151">concepts/</text>
+    <rect x="208" y="520" width="54" height="22" rx="3" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
+    <text x="235" y="535" text-anchor="middle" font-size="9" fill="#374151">people/</text>
+    <rect x="268" y="520" width="54" height="22" rx="3" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
+    <text x="295" y="535" text-anchor="middle" font-size="9" fill="#374151">projects/</text>
+    <rect x="76" y="548" width="70" height="22" rx="3" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
+    <text x="111" y="563" text-anchor="middle" font-size="9" fill="#374151">meetings/</text>
+    <rect x="152" y="548" width="50" height="22" rx="3" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
+    <text x="177" y="563" text-anchor="middle" font-size="9" fill="#374151">ideas/</text>
+    <rect x="208" y="548" width="54" height="22" rx="3" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
+    <text x="235" y="563" text-anchor="middle" font-size="9" fill="#374151">tools/</text>
+
+    <text x="80" y="580" font-size="9" fill="#059669">SCHEMA v3: Truth + Timeline</text>
+    <text x="80" y="580" dx="160" font-size="9" fill="#059669">8 types</text>
+  </g>
+
+  <!-- Metadata -->
+  <g id="storage-meta">
+    <rect x="380" y="492" width="200" height="92" rx="6" fill="#ffffff" stroke="#86efac" stroke-width="1"/>
+    <text x="400" y="510" font-size="11" font-weight="500" fill="#166534">Metadata</text>
+
+    <rect x="396" y="520" width="168" height="22" rx="3" fill="#fffbeb" stroke="#fcd34d" stroke-width="1"/>
+    <text x="480" y="535" text-anchor="middle" font-size="10" fill="#92400e">registry.json</text>
+
+    <rect x="396" y="548" width="168" height="22" rx="3" fill="#faf5ff" stroke="#d8b4fe" stroke-width="1"/>
+    <text x="480" y="563" text-anchor="middle" font-size="10" fill="#6b21a8">graph.json</text>
+
+    <text x="400" y="580" font-size="9" fill="#059669">Entity IDs + Knowledge Graph</text>
+  </g>
+
+  <!-- Source Materials -->
+  <g id="storage-src">
+    <rect x="600" y="492" width="300" height="92" rx="6" fill="#ffffff" stroke="#86efac" stroke-width="1"/>
+    <text x="620" y="510" font-size="11" font-weight="500" fill="#166534">Source Materials (src/)</text>
+    <text x="620" y="530" font-size="9" fill="#6b7280">Not indexed. Referenced by wiki pages.</text>
+
+    <rect x="616" y="540" width="50" height="18" rx="2" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
+    <text x="641" y="553" text-anchor="middle" font-size="9" fill="#374151">images/</text>
+    <rect x="672" y="540" width="46" height="18" rx="2" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
+    <text x="695" y="553" text-anchor="middle" font-size="9" fill="#374151">pdfs/</text>
+    <rect x="724" y="540" width="50" height="18" rx="2" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
+    <text x="749" y="553" text-anchor="middle" font-size="9" fill="#374151">articles/</text>
+    <rect x="780" y="540" width="50" height="18" rx="2" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
+    <text x="805" y="553" text-anchor="middle" font-size="9" fill="#374151">audio/</text>
+    <rect x="836" y="540" width="50" height="18" rx="2" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
+    <text x="861" y="553" text-anchor="middle" font-size="9" fill="#374151">videos/</text>
+
+    <text x="620" y="580" font-size="9" fill="#059669">Raw files — read-only archive</text>
+  </g>
+
+  <!-- ===== EDGES: Tools → Storage ===== -->
+  <!-- Wiki CRUD → Pages -->
+  <path d="M190,412 L190,430 L210,430 L210,492" stroke="#059669" stroke-width="1.5" fill="none" marker-end="url(#a-green)"/>
+
+  <!-- Entity Registry → Metadata -->
+  <path d="M478,412 L478,430 L480,430 L480,492" stroke="#059669" stroke-width="1.5" fill="none" marker-end="url(#a-green)"/>
+
+  <!-- Search → OpenViking (external) -->
+  <path d="M768,412 L768,430 L880,430 L880,460" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#a-purple)"/>
+  <text x="840" y="446" font-size="9" fill="#7c3aed">OpenViking</text>
+
+  <!-- wiki_create → Entity Registry (internal cross-reference) -->
+  <path d="M320,305 L348,305" stroke="#ea580c" stroke-width="1" stroke-dasharray="3,2" marker-end="url(#a-orange)"/>
+  <text x="328" y="298" font-size="8" fill="#ea580c">auto-register</text>
+
+  <!-- ===== RESOLVER flow (bottom annotation) ===== -->
+  <g id="resolver-flow">
+    <rect x="40" y="618" width="880" height="48" rx="6" fill="#fffbeb" stroke="#fbbf24" stroke-width="1"/>
+    <text x="60" y="638" font-size="10" fill="#92400e" font-weight="500">RESOLVER ROUTING:</text>
+    <text x="190" y="638" font-size="10" fill="#374151">wiki_create(name, type) → type_dir_map[type] → wiki/{dir}/{slug}.md → entity_registry.register()</text>
+    <text x="60" y="656" font-size="10" fill="#92400e" font-weight="500">PAGE SCHEMA:</text>
+    <text x="148" y="656" font-size="10" fill="#374151">frontmatter (metadata) → Executive Summary (rewritable) → Key Facts → Relations → ─── separator ─── → Timeline (append-only)</text>
+  </g>
+
+  <!-- ===== LEGEND ===== -->
+  <g id="legend" transform="translate(720, 78)">
+    <rect x="0" y="0" width="190" height="54" rx="4" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
+    <text x="12" y="16" font-size="10" font-weight="600" fill="#374151">LEGEND</text>
+    <rect x="12" y="24" width="12" height="10" rx="2" fill="#f0fdf4" stroke="#86efac" stroke-width="1"/>
+    <text x="28" y="33" font-size="9" fill="#6b7280">Write operation</text>
+    <rect x="102" y="24" width="12" height="10" rx="2" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
+    <text x="118" y="33" font-size="9" fill="#6b7280">Read only</text>
+    <line x1="12" y1="45" x2="36" y2="45" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="4,2"/>
+    <text x="42" y="48" font-size="9" fill="#6b7280">External (optional)</text>
+  </g>
+</svg>
