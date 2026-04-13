@@ -26,12 +26,12 @@ import os
 import re
 import sys
 import time
+import yaml
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 # Entity Registry integration
-import sys
 sys.path.insert(0, str(Path(__file__).parent))
 try:
     import entity_registry as er
@@ -48,6 +48,9 @@ PEOPLE_DIR = WIKI_ROOT / "people"
 PROJECTS_DIR = WIKI_ROOT / "projects"
 MEETINGS_DIR = WIKI_ROOT / "meetings"
 IDEAS_DIR = WIKI_ROOT / "ideas"
+COMPARISONS_DIR = WIKI_ROOT / "comparisons"
+QUERIES_DIR = WIKI_ROOT / "queries"
+TOOLS_DIR = WIKI_ROOT / "tools"
 SCHEMA_FILE = WIKI_ROOT / "SCHEMA.md"
 
 # LLM 配置
@@ -58,20 +61,16 @@ LLM_API_KEY = os.environ.get("GLM_API_KEY", "")
 # ============ Wiki Parser ============
 
 def parse_frontmatter(content: str) -> dict:
-    """Extract YAML frontmatter from markdown."""
-    match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
+    """Extract YAML frontmatter from markdown using PyYAML."""
+    match = re.match(r'^---\s*\n(.*?)\n---\s*\n(.*)$', content, re.DOTALL)
     if not match:
         return {}
-    fm = {}
-    for line in match.group(1).split('\n'):
-        if ':' in line:
-            key, _, val = line.partition(':')
-            key = key.strip()
-            val = val.strip().strip('"').strip("'")
-            # Handle list values like [tag1, tag2]
-            if val.startswith('[') and val.endswith(']'):
-                val = [v.strip().strip('"').strip("'") for v in val[1:-1].split(',')]
-            fm[key] = val
+    try:
+        fm = yaml.safe_load(match.group(1))
+    except yaml.YAMLError:
+        return {}
+    if not isinstance(fm, dict):
+        return {}
     return fm
 
 
@@ -116,7 +115,7 @@ def extract_compiled_truth(content: str) -> str:
 def load_all_pages() -> list[dict]:
     """Load all wiki pages with parsed metadata."""
     pages = []
-    for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR]:
+    for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR]:
         if not subdir.exists():
             continue
         for md_file in subdir.glob("*.md"):

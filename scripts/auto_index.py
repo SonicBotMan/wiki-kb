@@ -44,7 +44,6 @@ if not _logger.handlers:
     _logger.addHandler(_sh)
 
 # Entity Registry integration
-import sys
 sys.path.insert(0, str(Path(__file__).parent))
 try:
     import entity_registry as er
@@ -227,7 +226,7 @@ def generate_graph() -> dict:
                 relations = parse_relations(content)
                 for rel in relations:
                     target = rel["target"]
-                    if target in all_page_ids or True:  # include all, validate later
+                    if target in all_page_ids:
                         edges.append({
                             "source": page_id,
                             "target": target,

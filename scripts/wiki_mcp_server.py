@@ -11,6 +11,7 @@ import re
 import uuid
 import logging
 import signal
+import yaml
 from pathlib import Path
 from datetime import datetime
 
@@ -29,7 +30,7 @@ if not _logger.handlers:
     _sh = logging.StreamHandler(sys.stderr)
     _sh.setLevel(logging.WARNING)
     _sh.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
-_logger.addHandler(_sh)
+    _logger.addHandler(_sh)
 from typing import Optional, List, Dict, Any
 
 # ============================================================
@@ -53,9 +54,13 @@ WIKI_ROOT = Path(os.environ.get("WIKI_ROOT", str(Path.home() / "wiki")))
 REGISTRY_FILE = WIKI_ROOT / "registry.json"
 
 # OpenViking API 配置
-OPENVIKING_HOST = os.environ.get("OPENVIKING_HOST", "localhost")
-OPENVIKING_PORT = int(os.environ.get("OPENVIKING_PORT", "1933"))
-OPENVIKING_URL = f"http://{OPENVIKING_HOST}:{OPENVIKING_PORT}"
+OPENVIKING_ENDPOINT = os.environ.get("OPENVIKING_ENDPOINT", "")
+if OPENVIKING_ENDPOINT:
+    OPENVIKING_URL = OPENVIKING_ENDPOINT
+else:
+    OPENVIKING_HOST = os.environ.get("OPENVIKING_HOST", "localhost")
+    OPENVIKING_PORT = int(os.environ.get("OPENVIKING_PORT", "1933"))
+    OPENVIKING_URL = f"http://{OPENVIKING_HOST}:{OPENVIKING_PORT}"
 OPENVIKING_API_KEY = os.environ.get("OPENVIKING_API_KEY", "")
 OPENVIKING_ACCOUNT = os.environ.get("OPENVIKING_ACCOUNT", "hermes")
 
@@ -76,6 +81,12 @@ def _build_page_index():
     _page_index_built = True
     return _page_index_cache
 
+def _invalidate_page_cache():
+    """Invalidate the page index cache."""
+    global _page_index_cache, _page_index_built
+    _page_index_cache = {}
+    _page_index_built = False
+
 def _uri_to_page_path(uri: str) -> str:
     """将 OpenViking URI 映射回 wiki 文件路径。"""
     parts = uri.rstrip('/').split('/')
@@ -92,7 +103,7 @@ OPENVIKING_USER = os.environ.get("OPENVIKING_USER", "default")
 # ============================================================
 # 3. 导入 entity_registry 模块
 # ============================================================
-sys.path.insert(0, str(WIKI_ROOT / "scripts"))
+sys.path.insert(0, str(Path(__file__).parent))
 try:
     import entity_registry
 except ImportError as e:
@@ -145,6 +156,10 @@ except ImportError as e:
                 "metadata": {}
             }
             reg["entities"][entity_id] = new_entity
+            # 更新 alias_index
+            reg["alias_index"][name.strip().lower()] = entity_id
+            for alias in (aliases or []):
+                reg["alias_index"][alias.lower().strip()] = entity_id
             if page_path:
                 reg["page_index"][page_path] = entity_id
             reg["stats"]["total_entities"] = len(reg["entities"])
@@ -169,10 +184,11 @@ except ImportError as e:
             if source.get("primary_page"):
                 target["related_pages"].append(source["primary_page"])
             target["updated"] = datetime.now().strftime("%Y-%m-%d")
-            for alias in source.get("aliases", []):
-                if reg["alias_index"].get(alias) == entity_id:
-                    del reg["alias_index"][alias]
             del reg["entities"][entity_id]
+            # 更新 page_index：所有指向 entity_id 的改为 into_id
+            for page_path, eid in reg["page_index"].items():
+                if eid == entity_id:
+                    reg["page_index"][page_path] = into_id
             entity_registry.save_registry(reg)
             return True
 
@@ -249,19 +265,18 @@ def _resolve_page_path(page_id: str) -> Optional[Path]:
         if '-' in page_id or '_' in page_id:
             for f in (WIKI_ROOT / subdir).glob("*"):
                 if f.stem.replace('-', '').replace('_', '') == page_id.replace('-', '').replace('_', ''):
-                    return f
+                    return _validate_path(f)
 
     # 搜索所有 .md 文件
     for f in WIKI_ROOT.rglob("*.md"):
         if f.stem == page_id or f.stem.replace('-', '') == page_id.replace('-', ''):
-            return f
+            return _validate_path(f)
 
     return None
 
 
 def _get_frontmatter(content: str) -> tuple[dict, str]:
     """提取 markdown 文件的 frontmatter (YAML)"""
-    import yaml
     match = re.match(r'^---\s*\n(.*?)\n---\s*\n(.*)$', content, re.DOTALL)
     if match:
         fm_text = match.group(1)
@@ -278,7 +293,6 @@ def _get_frontmatter(content: str) -> tuple[dict, str]:
 
 def _update_frontmatter(content: str, updates: dict) -> str:
     """更新 frontmatter 中的指定字段"""
-    import yaml
     fm, body = _get_frontmatter(content)
     fm.update(updates)
     fm_text = yaml.dump(fm, default_flow_style=False, allow_unicode=True, sort_keys=False)
@@ -328,10 +342,13 @@ def _update_section(body: str, section: str, content: str) -> str:
 
     # 如果 section 不存在，在适当位置插入
     if not section_found:
-        # 在 Timeline 之前插入
+        # 找到 ## Timeline 之前的 ---
         timeline_idx = None
+        in_timeline = False
         for i, line in enumerate(new_lines):
-            if line.strip() == '---':
+            if line.strip() == '## Timeline':
+                in_timeline = True
+            if in_timeline and line.strip() == '---':
                 timeline_idx = i
                 break
 
@@ -487,15 +504,15 @@ def wiki_get(page_id: str) -> Dict:
 
 
 @mcp.tool()
-def wiki_create(name: str, type: str, description: str, content: str = "") -> Dict:
+def wiki_create(name: str, entity_type: str, description: str, content: str = "") -> Dict:
     """
     创建新 wiki 页面。
     按 RESOLVER 路由到正确目录，自动生成 frontmatter + v3 schema。
     自动注册到 Entity Registry。
     返回 {page_path, entity_id}
     """
-    # 验证 type
-    type = _validate_type(type)
+    # 验证 entity_type
+    entity_type = _validate_type(entity_type)
     
     # 内容长度限制 (1MB)
     if len(description) > 500_000 or len(content) > 1_000_000:
@@ -514,7 +531,7 @@ def wiki_create(name: str, type: str, description: str, content: str = "") -> Di
         "tool": "tools"
     }
 
-    subdir = type_dir_map.get(type.lower(), "concepts")
+    subdir = type_dir_map.get(entity_type.lower(), "concepts")
     slug = _slugify(name)
     page_path = WIKI_ROOT / subdir / f"{slug}.md"
 
@@ -527,13 +544,7 @@ def wiki_create(name: str, type: str, description: str, content: str = "") -> Di
 
     # 构建 v3 schema 结构
     page_content = f"""---
-title: {name}
-created: {now}
-updated: {now}
-type: {type}
-tags: []
-sources: []
-status: draft
+{yaml.dump({"title": name, "created": now, "updated": now, "type": entity_type, "tags": [], "sources": [], "status": "draft"}, default_flow_style=False, allow_unicode=True)}
 ---
 
 # {name}
@@ -566,25 +577,36 @@ status: draft
     rel_path = str(page_path.relative_to(WIKI_ROOT))
     entity = entity_registry.register(
         name=name,
-        entity_type=type,
+        entity_type=entity_type,
         page_path=rel_path
     )
+
+    # Invalidate page cache since we created a new page
+    _invalidate_page_cache()
 
     return {
         "page_path": rel_path,
         "entity_id": entity.get("id"),
         "title": name,
-        "type": type
+        "type": entity_type
     }
 
 
 @mcp.tool()
 def wiki_update(page_id: str, section: str, content: str) -> Dict:
     """
-    更新指定 section（executive_summary / key_facts / relations）。
-    Timeline section 自动 append，不覆盖。
+    更新指定 section（executive_summary / key_facts / relations / timeline）。
     返回 {page_path, updated_sections}
     """
+    ALLOWED_SECTIONS = {'executive_summary', 'key_facts', 'relations', 'timeline'}
+    if section.lower() not in ALLOWED_SECTIONS:
+        raise ValueError(f"无效 section: '{section}'，允许: {ALLOWED_SECTIONS}")
+    
+    if section.lower() == "timeline":
+        return {
+            "error": "Timeline section 不支持直接更新，请使用 wiki_append_timeline 工具追加条目"
+        }
+    
     path = _resolve_page_path(page_id)
     if not path:
         raise ValueError(f"页面未找到: {page_id}")
@@ -593,21 +615,12 @@ def wiki_update(page_id: str, section: str, content: str) -> Dict:
     fm, body = _get_frontmatter(original)
 
     # 更新 body 中的 section
-    if section.lower() == "timeline":
-        # Timeline 追加模式
-        new_body = body.rstrip()
-        if not new_body.endswith('\n'):
-            new_body += '\n'
-        new_body += f"\n- **{datetime.now().strftime('%Y-%m-%d')}** | {content}\n"
-        body = new_body
-    else:
-        body = _update_section(body, section, content)
+    body = _update_section(body, section, content)
 
     # 更新 frontmatter 中的 updated 日期
     fm['updated'] = datetime.now().strftime("%Y-%m-%d")
 
     # 重新组装
-    import yaml
     fm_text = yaml.dump(fm, default_flow_style=False, allow_unicode=True, sort_keys=False)
     new_content = f"---\n{fm_text}---\n{body}"
 
@@ -654,7 +667,7 @@ def wiki_append_timeline(page_id: str, event: str, source: str = "") -> Dict:
             sep_idx = after.index("---")
             after = after[:sep_idx] + entry + "---\n" + after[sep_idx+3:]
         else:
-            after = entry + after
+            after = after + entry
 
         body = before + timeline_marker + after
     else:
@@ -668,7 +681,6 @@ def wiki_append_timeline(page_id: str, event: str, source: str = "") -> Dict:
     fm['updated'] = now
 
     # 重新组装
-    import yaml
     fm_text = yaml.dump(fm, default_flow_style=False, allow_unicode=True, sort_keys=False)
     new_content = f"---\n{fm_text}---\n{body}"
 
@@ -682,7 +694,7 @@ def wiki_append_timeline(page_id: str, event: str, source: str = "") -> Dict:
 
 
 @mcp.tool()
-def wiki_list(type: str = "", status: str = "") -> List[Dict]:
+def wiki_list(entity_type: str = "", status: str = "") -> List[Dict]:
     """
     列出 wiki 页面。
     可选按 type 和 status 过滤。
@@ -700,7 +712,7 @@ def wiki_list(type: str = "", status: str = "") -> List[Dict]:
             fm, _ = _get_frontmatter(content)
 
             # 类型过滤
-            if type and fm.get('type') != type:
+            if entity_type and fm.get('type') != entity_type:
                 continue
 
             # 状态过滤
@@ -745,15 +757,15 @@ def entity_resolve(name: str) -> Optional[Dict]:
 
 
 @mcp.tool()
-def entity_register(name: str, type: str, aliases: List[str] = None) -> Dict:
+def entity_register(name: str, entity_type: str, aliases: List[str] = None) -> Dict:
     """
     注册新实体。
     返回 {id, canonical_name, aliases}
     """
-    type = _validate_type(type)
+    entity_type = _validate_type(entity_type)
     entity = entity_registry.register(
         name=name,
-        entity_type=type,
+        entity_type=entity_type,
         aliases=aliases or []
     )
     return {
@@ -764,15 +776,15 @@ def entity_register(name: str, type: str, aliases: List[str] = None) -> Dict:
 
 
 @mcp.tool()
-def entity_list(type: str = "") -> List[Dict]:
+def entity_list(entity_type: str = "") -> List[Dict]:
     """
     列出实体。
     可选按 type 过滤。
     返回实体列表。
     """
     entities = entity_registry.get_all_entities()
-    if type:
-        entities = [e for e in entities if e.get("type") == type]
+    if entity_type:
+        entities = [e for e in entities if e.get("type") == entity_type]
 
     return [
         {

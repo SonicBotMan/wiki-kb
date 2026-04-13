@@ -29,15 +29,16 @@ LOCK_PATH = REGISTRY_PATH.with_suffix(".lock")
 # === 文件锁 ===
 
 @contextmanager
-def _registry_lock(timeout: int = 30):
-    """获取 registry.json 的排他锁，防止并发写入。"""
+def _registry_lock(timeout: int = 30, exclusive: bool = True):
+    """获取 registry.json 的文件锁，排他锁(LOCK_EX)用于写入，共享锁(LOCK_SH)用于读取。"""
     LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(str(LOCK_PATH), os.O_CREAT | os.O_RDWR)
+    lock_type = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
     try:
         deadline = datetime.now().timestamp() + timeout
         while datetime.now().timestamp() < deadline:
             try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(fd, lock_type | fcntl.LOCK_NB)
                 yield fd
                 return
             except (BlockingIOError, OSError):
@@ -57,10 +58,11 @@ def load_registry() -> dict:
     """加载 registry.json，不存在返回空结构"""
     if not REGISTRY_PATH.exists():
         return _empty_registry()
-    
+
     try:
-        with open(REGISTRY_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
+        with _registry_lock(exclusive=False):
+            with open(REGISTRY_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
     except (json.JSONDecodeError, IOError):
         return _empty_registry()
 
@@ -287,13 +289,21 @@ def register(name: str, entity_type: str, page_path: str = "", aliases: list = N
             if normalize_name(_remove_brackets(entity.get("canonical_name", ""))) == no_bracket_norm:
                 return entity
     
-    # 4. 包含关系匹配
+    # 4. 包含关系匹配（要求最小长度4字符 + 单词边界匹配）
+    MIN_SUBSTR_LEN = 4
     for entity in reg["entities"].values():
         can_name = entity.get("canonical_name", "")
         can_norm = normalize_name(can_name)
-        # 检查 name 是否包含于已有实体，或已有实体包含于 name
-        if can_norm and (norm in can_norm or can_norm in norm):
-            return entity
+        # 单词边界匹配：确保子串是独立单词而非其他词的一部分
+        if can_norm and len(norm) >= MIN_SUBSTR_LEN and len(can_norm) >= MIN_SUBSTR_LEN:
+            if norm in can_norm:
+                # 检查 norm 是否以单词边界出现在 can_norm 中
+                if re.search(r'\b' + re.escape(norm) + r'\b', can_norm):
+                    return entity
+            if can_norm in norm:
+                # 检查 can_norm 是否以单词边界出现在 norm 中
+                if re.search(r'\b' + re.escape(can_norm) + r'\b', norm):
+                    return entity
     
     # 5. 创建新实体
     entity_id = generate_id()
@@ -567,7 +577,7 @@ def find_duplicates() -> list:
 def scan_wiki_pages(wiki_root: str = None) -> dict:
     """扫描所有 wiki 页面的 frontmatter，自动注册/更新实体"""
     if wiki_root is None:
-        wiki_root = str(Path.home() / "wiki")
+        wiki_root = os.environ.get('WIKI_ROOT', str(Path.home() / 'wiki'))
     
     wiki_path = Path(wiki_root).expanduser()
     

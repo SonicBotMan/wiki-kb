@@ -256,7 +256,7 @@ def main():
     print()
     
     migrated = 0
-    for subdir in ['concepts', 'entities']:
+    for subdir in ['concepts', 'entities', 'people', 'projects', 'meetings', 'ideas', 'comparisons', 'queries', 'tools']:
         dir_path = WIKI_ROOT / subdir
         if not dir_path.exists():
             continue
