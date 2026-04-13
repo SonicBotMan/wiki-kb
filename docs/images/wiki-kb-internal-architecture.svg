@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 680" width="960" height="680" font-family="system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 700" width="960" height="700" font-family="system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
   <defs>
     <marker id="a-blue" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
       <path d="M0,0 L10,3.5 L0,7 Z" fill="#2563eb"/>
@@ -12,13 +12,10 @@
     <marker id="a-purple" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
       <path d="M0,0 L10,3.5 L0,7 Z" fill="#7c3aed"/>
     </marker>
-    <marker id="a-gray" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,3.5 L0,7 Z" fill="#6b7280"/>
-    </marker>
   </defs>
 
   <!-- Background -->
-  <rect width="960" height="680" fill="#ffffff"/>
+  <rect width="960" height="700" fill="#ffffff"/>
 
   <!-- Title -->
   <text x="40" y="36" font-size="20" font-weight="600" fill="#0f172a">Wiki-KB Internal Architecture</text>
@@ -92,7 +89,7 @@
   <!-- Search + System Tools -->
   <g id="tools-system">
     <rect x="636" y="192" width="264" height="220" rx="6" fill="#ffffff" stroke="#93c5fd" stroke-width="1"/>
-    <text x="656" y="212" font-size="11" font-weight="600" fill="#1e40af">Search &amp; System (2 tools)</text>
+    <text x="656" y="212" font-size="11" font-weight="600" fill="#1e40af">Search &amp; System (1 tool)</text>
 
     <!-- Search -->
     <rect x="652" y="224" width="232" height="44" rx="4" fill="#faf5ff" stroke="#d8b4fe" stroke-width="1"/>
@@ -105,7 +102,7 @@
 
     <!-- Internal modules -->
     <text x="672" y="336" font-size="10" fill="#6b7280" font-weight="500">Internal Modules:</text>
-    <text x="672" y="354" font-size="10" fill="#374151">wiki_utils.py — frontmatter</text>
+    <text x="672" y="354" font-size="10" fill="#374151">wiki_config.py — centralized</text>
     <text x="672" y="370" font-size="10" fill="#374151">entity_registry.py — registry</text>
     <text x="672" y="386" font-size="10" fill="#374151">Auth check — optional API key</text>
     <text x="672" y="402" font-size="10" fill="#374151">Session timeout — 24h</text>
@@ -134,9 +131,11 @@
     <text x="177" y="563" text-anchor="middle" font-size="9" fill="#374151">ideas/</text>
     <rect x="208" y="548" width="54" height="22" rx="3" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
     <text x="235" y="563" text-anchor="middle" font-size="9" fill="#374151">tools/</text>
+    <rect x="268" y="548" width="76" height="22" rx="3" fill="#f9fafb" stroke="#d1d5db" stroke-width="1"/>
+    <text x="306" y="563" text-anchor="middle" font-size="9" fill="#374151">comparisons/</text>
 
     <text x="80" y="580" font-size="9" fill="#059669">SCHEMA v3: Truth + Timeline</text>
-    <text x="80" y="580" dx="160" font-size="9" fill="#059669">8 types</text>
+    <text x="250" y="580" font-size="9" fill="#059669">9 types</text>
   </g>
 
   <!-- Metadata -->
@@ -188,13 +187,28 @@
   <path d="M320,305 L348,305" stroke="#ea580c" stroke-width="1" stroke-dasharray="3,2" marker-end="url(#a-orange)"/>
   <text x="328" y="298" font-size="8" fill="#ea580c">auto-register</text>
 
-  <!-- ===== RESOLVER flow (bottom annotation) ===== -->
-  <g id="resolver-flow">
-    <rect x="40" y="618" width="880" height="48" rx="6" fill="#fffbeb" stroke="#fbbf24" stroke-width="1"/>
-    <text x="60" y="638" font-size="10" fill="#92400e" font-weight="500">RESOLVER ROUTING:</text>
-    <text x="190" y="638" font-size="10" fill="#374151">wiki_create(name, type) → type_dir_map[type] → wiki/{dir}/{slug}.md → entity_registry.register()</text>
-    <text x="60" y="656" font-size="10" fill="#92400e" font-weight="500">PAGE SCHEMA:</text>
-    <text x="148" y="656" font-size="10" fill="#374151">frontmatter (metadata) → Executive Summary (rewritable) → Key Facts → Relations → ─── separator ─── → Timeline (append-only)</text>
+  <!-- ===== AUTOMATION PIPELINE (bottom) ===== -->
+  <g id="automation-pipeline">
+    <rect x="40" y="618" width="880" height="68" rx="6" fill="#fef3c7" stroke="#fbbf24" stroke-width="1"/>
+    <text x="60" y="638" font-size="10" fill="#92400e" font-weight="600">AUTOMATION PIPELINE (cron scripts)</text>
+
+    <!-- 4 pipeline boxes -->
+    <rect x="60" y="648" width="180" height="28" rx="4" fill="#ffffff" stroke="#fcd34d" stroke-width="1"/>
+    <text x="150" y="666" text-anchor="middle" font-size="10" fill="#374151">auto_index.py — graph + OV sync</text>
+
+    <rect x="256" y="648" width="180" height="28" rx="4" fill="#ffffff" stroke="#fcd34d" stroke-width="1"/>
+    <text x="346" y="666" text-anchor="middle" font-size="10" fill="#374151">dream_cycle.py — LLM audit</text>
+
+    <rect x="452" y="648" width="180" height="28" rx="4" fill="#ffffff" stroke="#fcd34d" stroke-width="1"/>
+    <text x="542" y="666" text-anchor="middle" font-size="10" fill="#374151">memory_to_wiki.py — OV→Wiki</text>
+
+    <rect x="648" y="648" width="180" height="28" rx="4" fill="#ffffff" stroke="#fcd34d" stroke-width="1"/>
+    <text x="738" y="666" text-anchor="middle" font-size="10" fill="#374151">wiki-to-notion.py — Wiki→Notion</text>
+
+    <!-- Arrows between pipeline boxes -->
+    <line x1="240" y1="662" x2="256" y2="662" stroke="#d97706" stroke-width="1" marker-end="url(#a-orange)"/>
+    <line x1="436" y1="662" x2="452" y2="662" stroke="#d97706" stroke-width="1" marker-end="url(#a-orange)"/>
+    <line x1="632" y1="662" x2="648" y2="662" stroke="#d97706" stroke-width="1" marker-end="url(#a-orange)"/>
   </g>
 
   <!-- ===== LEGEND ===== -->
