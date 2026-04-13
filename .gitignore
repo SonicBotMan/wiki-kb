@@ -1,0 +1,34 @@
+# User wiki data (user-generated content — don't commit)
+wiki/concepts/
+wiki/entities/
+wiki/people/
+wiki/projects/
+wiki/meetings/
+wiki/ideas/
+wiki/comparisons/
+wiki/queries/
+wiki/src/
+wiki/logs/
+wiki/graph.json
+wiki/registry.json
+wiki/.auto_index_state.json
+
+# Environment
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Backups
+*.tar.gz
