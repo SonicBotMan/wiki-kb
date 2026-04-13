@@ -43,6 +43,11 @@ _WIKI_ROOT = Path(os.environ.get("WIKI_ROOT", str(Path.home() / "wiki")))
 REGISTRY_PATH = _WIKI_ROOT / "registry.json"
 LOCK_PATH = REGISTRY_PATH.with_suffix(".lock")
 
+# P2: Registry 内存缓存
+_reg_cache = None
+_reg_cache_mtime = 0.0
+
+
 
 # === 文件锁 ===
 
@@ -73,16 +78,35 @@ def _registry_lock(timeout: int = 30, exclusive: bool = True):
 # === 数据层 ===
 
 def load_registry() -> dict:
-    """加载 registry.json，不存在返回空结构"""
+    """加载 registry.json（带内存缓存，mtime 变化时自动失效）"""
+    global _reg_cache, _reg_cache_mtime
     if not REGISTRY_PATH.exists():
         return _empty_registry()
-
+    
+    try:
+        current_mtime = REGISTRY_PATH.stat().st_mtime
+    except OSError:
+        return _empty_registry()
+    
+    # P2: 缓存命中（mtime 未变）
+    if _reg_cache is not None and current_mtime == _reg_cache_mtime:
+        return _reg_cache
+    
     try:
         with _registry_lock(exclusive=False):
             with open(REGISTRY_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+        _reg_cache = data
+        _reg_cache_mtime = current_mtime
+        return data
     except (json.JSONDecodeError, IOError, TimeoutError):
         return _empty_registry()
+
+def invalidate_registry_cache():
+    """手动失效 registry 缓存（save_registry 后调用）"""
+    global _reg_cache, _reg_cache_mtime
+    _reg_cache = None
+    _reg_cache_mtime = 0.0
 
 
 def save_registry(reg: dict) -> None:
@@ -100,6 +124,10 @@ def save_registry(reg: dict) -> None:
         
         # 原子替换
         tmp_path.rename(REGISTRY_PATH)
+        # P2: 失效缓存，下次 load 时重新读取
+        global _reg_cache, _reg_cache_mtime
+        _reg_cache = None
+        _reg_cache_mtime = 0.0
         logger.debug("registry.json 已保存 (entities=%d, aliases=%d)", 
                      len(reg.get("entities", {})), len(reg.get("alias_index", {})))
 

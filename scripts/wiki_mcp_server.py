@@ -92,14 +92,86 @@ OPENVIKING_ACCOUNT = os.environ.get("OPENVIKING_ACCOUNT", "hermes")
 _page_index_cache = {}
 _page_index_built = False
 
+
+# ============================================================
+# 2b. 性能优化：目录白名单 + 缓存 + OpenViking backoff
+# ============================================================
+import time as _time
+
+# P0: 只扫描内容目录，跳过 src/logs/scripts/queries/comparisons/raw
+_CONTENT_DIRS = ['concepts', 'entities', 'people', 'projects',
+                 'meetings', 'ideas', 'comparisons', 'queries', 'tools']
+
+def _iter_wiki_pages():
+    """只遍历内容目录中的 .md 文件，跳过 src/、logs/ 等非 wiki 文件"""
+    for subdir_name in _CONTENT_DIRS:
+        subdir = WIKI_ROOT / subdir_name
+        if subdir.exists():
+            yield from subdir.glob("*.md")
+
+# P1: Frontmatter 元数据缓存（TTL + mtime 失效）
+_fm_cache = {}          # path_str → {fm, body, mtime}
+_FM_CACHE_TTL = 30      # 秒
+
+def _get_cached_frontmatter(md_file, full_body=False):
+    """带 TTL 的 frontmatter 缓存，mtime 变化时自动失效。
+    full_body=True 时同时缓存 body 内容（用于搜索）。
+    """
+    path_str = str(md_file)
+    try:
+        mtime = md_file.stat().st_mtime
+    except OSError:
+        return None, None
+    
+    cached = _fm_cache.get(path_str)
+    if cached:
+        if cached['mtime'] == mtime and (_time.time() - cached.get('ts', 0)) < _FM_CACHE_TTL:
+            if full_body:
+                return cached['fm'], cached.get('body')
+            return cached['fm'], None
+    
+    try:
+        raw = md_file.read_text(encoding='utf-8')
+        fm, body = get_frontmatter(raw)
+    except Exception:
+        return None, None
+    
+    entry = {'fm': fm, 'mtime': mtime, 'ts': _time.time()}
+    if full_body:
+        entry['body'] = body
+    _fm_cache[path_str] = entry
+    
+    # 防止缓存无限增长
+    if len(_fm_cache) > 500:
+        # 清理过期条目
+        now = _time.time()
+        expired = [k for k, v in _fm_cache.items() if (now - v.get('ts', 0)) > _FM_CACHE_TTL * 2]
+        for k in expired:
+            del _fm_cache[k]
+    
+    if full_body:
+        return fm, body
+    return fm, None
+
+def _invalidate_fm_cache(path_str=None):
+    """失效指定路径的缓存，或清空全部"""
+    if path_str:
+        _fm_cache.pop(path_str, None)
+    else:
+        _fm_cache.clear()
+
+# P3: OpenViking 快速失败 + 指数退避
+_ov_last_fail_time = 0.0
+_OV_BACKOFF = 60  # 失败后 60 秒内不重试
+_OV_TIMEOUT = 3   # 超时从 10s 降到 3s
+
+
 def _build_page_index():
     """构建 stem -> relative_path 索引，用于 OpenViking URI 到 wiki 文件路径映射。"""
     global _page_index_cache, _page_index_built
     if _page_index_built:
         return _page_index_cache
-    for f in WIKI_ROOT.rglob("*.md"):
-        if f.name in ['SCHEMA.md', 'RESOLVER.md', 'index.md', 'log.md']:
-            continue
+    for f in _iter_wiki_pages():
         stem = f.stem.lower().replace('_', '').replace('-', '')
         _page_index_cache[stem] = str(f.relative_to(WIKI_ROOT))
     _page_index_built = True
@@ -291,8 +363,8 @@ def _resolve_page_path(page_id: str) -> Optional[Path]:
                 if f.stem.replace('-', '').replace('_', '') == page_id.replace('-', '').replace('_', ''):
                     return _validate_path(f)
 
-    # 搜索所有 .md 文件
-    for f in WIKI_ROOT.rglob("*.md"):
+    # 搜索内容目录中的 .md 文件
+    for f in _iter_wiki_pages():
         if f.stem == page_id or f.stem.replace('-', '') == page_id.replace('-', ''):
             return _validate_path(f)
 
@@ -374,8 +446,14 @@ def _update_section(body: str, section: str, content: str) -> str:
 
 def _openviking_search(query: str, type_filter: str = "") -> List[Dict]:
     """调用 OpenViking API 进行语义搜索"""
+    global _ov_last_fail_time
     import urllib.request
     import urllib.parse
+
+    # P3: 如果最近失败过，直接走 fallback
+    if _time.time() - _ov_last_fail_time < _OV_BACKOFF:
+        _logger.debug("OV backoff: 跳过搜索，直接 fallback")
+        return _fallback_file_search(query, type_filter)
 
     try:
         url = f"{OPENVIKING_URL}/api/v1/search/search"
@@ -397,7 +475,7 @@ def _openviking_search(query: str, type_filter: str = "") -> List[Dict]:
             method="POST"
         )
 
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=_OV_TIMEOUT) as resp:
             result = json.loads(resp.read().decode('utf-8'))
             # Parse OpenViking v1 response format
             if result.get("status") == "ok":
@@ -433,21 +511,19 @@ def _fallback_file_search(query: str, type_filter: str = "") -> List[Dict]:
     results = []
     query_lower = query.lower()
 
-    for md_file in WIKI_ROOT.rglob("*.md"):
-        # 跳过非内容文件
-        if md_file.name in ['SCHEMA.md', 'RESOLVER.md', 'index.md', 'log.md']:
-            continue
-
+    for md_file in _iter_wiki_pages():
         try:
-            content = md_file.read_text(encoding='utf-8')
-            fm, body = get_frontmatter(content)
+            fm, body = _get_cached_frontmatter(md_file, full_body=True)
+            if fm is None:
+                continue
 
             # 类型过滤
             if type_filter and fm.get('type') != type_filter:
                 continue
 
-            # 简单文本匹配
-            if query_lower in content.lower():
+            # 简单文本匹配（fm+body）
+            match_text = str(fm).lower()
+            if query_lower in match_text or (body and query_lower in body.lower()):
                 rel_path = md_file.relative_to(WIKI_ROOT)
                 results.append({
                     "title": fm.get('title', md_file.stem),
@@ -721,14 +797,11 @@ def wiki_list(entity_type: str = "", status: str = "") -> List[Dict]:
     """
     pages = []
 
-    for md_file in WIKI_ROOT.rglob("*.md"):
-        # 跳过非内容文件
-        if md_file.name in ['SCHEMA.md', 'RESOLVER.md', 'index.md', 'log.md']:
-            continue
-
+    for md_file in _iter_wiki_pages():
         try:
-            content = md_file.read_text(encoding='utf-8')
-            fm, _ = get_frontmatter(content)
+            fm, _ = _get_cached_frontmatter(md_file)
+            if fm is None:
+                continue
 
             # 类型过滤
             if entity_type and fm.get('type') != entity_type:
@@ -853,14 +926,12 @@ def wiki_stats() -> Dict:
     page_counts = {}
     total_pages = 0
 
-    for md_file in WIKI_ROOT.rglob("*.md"):
-        if md_file.name in ['SCHEMA.md', 'RESOLVER.md', 'index.md', 'log.md']:
-            continue
+    for md_file in _iter_wiki_pages():
         total_pages += 1
-
         try:
-            content = md_file.read_text(encoding='utf-8')
-            fm, _ = get_frontmatter(content)
+            fm, _ = _get_cached_frontmatter(md_file)
+            if fm is None:
+                continue
             ptype = fm.get('type', 'unknown')
             page_counts[ptype] = page_counts.get(ptype, 0) + 1
         except Exception as e:
@@ -949,8 +1020,7 @@ def wiki_health() -> Dict:
 
     # 5. 页面文件数
     try:
-        page_count = sum(1 for f in WIKI_ROOT.rglob("*.md") 
-                        if f.name not in ['SCHEMA.md', 'RESOLVER.md', 'index.md', 'log.md'])
+        page_count = sum(1 for _ in _iter_wiki_pages())
         checks.append({"name": "pages", "status": "ok", 
                       "message": f"{page_count} 个 wiki 页面"})
     except Exception as e:
