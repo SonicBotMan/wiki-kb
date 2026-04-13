@@ -71,6 +71,18 @@ NOISE_PATTERNS = [
 
 NOISE_RE = re.compile("|".join(NOISE_PATTERNS), re.IGNORECASE)
 
+# ============ Type → Directory Mapping ============
+
+TYPE_DIR_MAP = {
+    "person": PEOPLE_DIR,
+    "organization": ENTITIES_DIR,
+    "project": PROJECTS_DIR,
+    "meeting": MEETINGS_DIR,
+    "idea": IDEAS_DIR,
+    "entity": ENTITIES_DIR,
+    "concept": CONCEPTS_DIR,
+}
+
 
 # ============ Environment Loading ============
 
@@ -336,16 +348,7 @@ def create_wiki_page(entity: dict, existing_pages: dict) -> Optional[str]:
     slug = re.sub(r"[^\w\u4e00-\u9fff-]", "-", name.lower())
     slug = re.sub(r"-+", "-", slug).strip("-")
 
-    # Determine directory using type-to-dir mapping
-    TYPE_DIR_MAP = {
-        "person": PEOPLE_DIR,
-        "organization": ENTITIES_DIR,
-        "project": PROJECTS_DIR,
-        "meeting": MEETINGS_DIR,
-        "idea": IDEAS_DIR,
-        "entity": ENTITIES_DIR,
-        "concept": CONCEPTS_DIR,
-    }
+    # Determine directory using module-level TYPE_DIR_MAP
     dir_path = TYPE_DIR_MAP.get(entity_type, CONCEPTS_DIR)
 
     filepath = dir_path / f"{slug}.md"
@@ -590,7 +593,7 @@ def main():
             if slug:
                 created_slugs.add(slug)
                 existing_pages[slug] = {
-                    "path": str((CONCEPTS_DIR if entity.get("type") not in ("person", "organization") else ENTITIES_DIR) / f"{slug}.md"),
+                    "path": str(TYPE_DIR_MAP.get(entity.get("type", ""), CONCEPTS_DIR) / f"{slug}.md"),
                     "title": name,
                     "content": "",
                 }

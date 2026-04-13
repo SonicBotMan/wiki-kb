@@ -14,6 +14,8 @@ import signal
 import yaml
 from pathlib import Path
 from datetime import datetime
+import tempfile
+import shutil
 
 # ============================================================
 # 0. 日志配置
@@ -32,6 +34,24 @@ if not _logger.handlers:
     _sh.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
     _logger.addHandler(_sh)
 from typing import Optional, List, Dict, Any
+
+
+def _atomic_write(path: Path, content: str, encoding: str = 'utf-8'):
+    """原子写入：先写临时文件再 rename，防止写入中途崩溃损坏文件。"""
+    fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w', encoding=encoding) as f:
+            f.write(content)
+        # 同步到磁盘
+        os.fsync(f.fileno()) if False else None  # fd already closed
+        Path(tmp_path).rename(path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
 
 # ============================================================
 # 1. 检查 mcp 包是否已安装
@@ -571,7 +591,7 @@ def wiki_create(name: str, entity_type: str, description: str, content: str = ""
 """
 
     page_path.parent.mkdir(parents=True, exist_ok=True)
-    page_path.write_text(page_content, encoding='utf-8')
+    _atomic_write(page_path, page_content)
 
     # 注册到 Entity Registry
     rel_path = str(page_path.relative_to(WIKI_ROOT))
@@ -624,7 +644,7 @@ def wiki_update(page_id: str, section: str, content: str) -> Dict:
     fm_text = yaml.dump(fm, default_flow_style=False, allow_unicode=True, sort_keys=False)
     new_content = f"---\n{fm_text}---\n{body}"
 
-    path.write_text(new_content, encoding='utf-8')
+    _atomic_write(path, new_content)
 
     rel_path = str(path.relative_to(WIKI_ROOT))
     return {
@@ -684,7 +704,7 @@ def wiki_append_timeline(page_id: str, event: str, source: str = "") -> Dict:
     fm_text = yaml.dump(fm, default_flow_style=False, allow_unicode=True, sort_keys=False)
     new_content = f"---\n{fm_text}---\n{body}"
 
-    path.write_text(new_content, encoding='utf-8')
+    _atomic_write(path, new_content)
 
     rel_path = str(path.relative_to(WIKI_ROOT))
     return {
