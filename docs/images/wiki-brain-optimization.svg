@@ -1,0 +1,199 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 640" width="960" height="640">
+  <style>
+    text { font-family: 'WenQuanYi Zen Hei', 'Courier New', monospace; }
+  </style>
+  <defs>
+    <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
+      <path d="M 30 0 L 0 0 0 30" fill="none" stroke="#112240" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arrow-cyan" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#00b4d8"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#06d6a0"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#f77f00"/>
+    </marker>
+    <marker id="arrow-gray" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#90e0ef"/>
+    </marker>
+  </defs>
+  <rect width="960" height="640" fill="#0a1628"/>
+  <rect width="960" height="640" fill="url(#grid)" opacity="0.6"/>
+
+  <!-- Title -->
+  <text x="40" y="38" fill="#caf0f8" font-size="16" font-weight="700" text-decoration="underline">WIKI-BRAIN MCP SERVER — PERFORMANCE OPTIMIZATION ARCHITECTURE</text>
+  <text x="40" y="56" fill="#48cae4" font-size="10">P0 · P1 · P2 · P3  |  NAS  |  Docker: wiki-brain  |  OpenViking</text>
+
+  <!-- LAYER: MCP Client -->
+  <rect x="40" y="80" width="880" height="50" rx="2" fill="#0d1f3c" stroke="#00b4d8" stroke-width="1"/>
+  <text x="55" y="97" fill="#caf0f8" font-size="11" font-weight="700">MCP CLIENT</text>
+  <text x="55" y="112" fill="#48cae4" font-size="9">Hermes Agent  ·  Discord/Telegram/CLI</text>
+  <text x="760" y="97" fill="#00b4d8" font-size="10" text-anchor="end">POST /mcp</text>
+  <text x="760" y="112" fill="#48cae4" font-size="9" text-anchor="end">MCP Protocol</text>
+
+  <!-- Arrow: MCP Client → MCP Router -->
+  <line x1="480" y1="130" x2="480" y2="155" stroke="#00b4d8" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+
+  <!-- LAYER: MCP Router / Tool Dispatcher -->
+  <rect x="40" y="158" width="880" height="44" rx="2" fill="#0d1f3c" stroke="#00b4d8" stroke-width="1"/>
+  <text x="55" y="175" fill="#caf0f8" font-size="11" font-weight="700">MCP TOOL DISPATCHER  (wiki_mcp_server.py)</text>
+  <text x="55" y="189" fill="#48cae4" font-size="9">wiki_search · wiki_list · wiki_get · wiki_update · wiki_stats · wiki_health · entity_*</text>
+
+  <!-- ============================================================ -->
+  <!-- ROUTING BRANCH: 3 parallel paths                            -->
+  <!-- ============================================================ -->
+  <!-- Path A: wiki_list / wiki_stats / wiki_health (→ P1 cache) -->
+  <!-- Path B: wiki_search (→ OV or fallback)                    -->
+  <!-- Path C: wiki_get / wiki_update / entity_* (→ P0+P2)       -->
+
+  <!-- Path A connector going LEFT -->
+  <line x1="40" y1="202" x2="40" y2="245" stroke="#00b4d8" stroke-width="1" marker-end="url(#arrow-cyan)"/>
+  <!-- Path B connector going CENTER -->
+  <line x1="480" y1="202" x2="480" y2="245" stroke="#00b4d8" stroke-width="1" marker-end="url(#arrow-cyan)"/>
+  <!-- Path C connector going RIGHT -->
+  <line x1="760" y1="202" x2="760" y2="245" stroke="#00b4d8" stroke-width="1" marker-end="url(#arrow-cyan)"/>
+
+  <!-- ============================================================ -->
+  <!-- PATH A: P1 — Frontmatter Metadata Cache                    -->
+  <!-- ============================================================ -->
+  <rect x="40" y="248" width="380" height="160" rx="2" fill="none" stroke="#06d6a0" stroke-width="1" stroke-dasharray="6,3"/>
+  <text x="55" y="265" fill="#06d6a0" font-size="10" font-weight="700">PATH A — P1: FRONTMATTER METADATA CACHE</text>
+  <text x="55" y="278" fill="#48cae4" font-size="9">Used by: wiki_list · wiki_stats · wiki_health</text>
+
+  <!-- Cache box -->
+  <rect x="55" y="288" width="200" height="105" rx="2" fill="#0d1f3c" stroke="#06d6a0" stroke-width="1"/>
+  <text x="65" y="305" fill="#06d6a0" font-size="10" font-weight="700">_frontmatter_cache</text>
+  <text x="65" y="320" fill="#caf0f8" font-size="9">{'path': {...}, ...}</text>
+  <text x="65" y="334" fill="#caf0f8" font-size="9">TTL: 30s</text>
+  <text x="65" y="348" fill="#caf0f8" font-size="9">Invalidate: mtime changed</text>
+  <text x="65" y="362" fill="#caf0f8" font-size="9">Key: file_path + mtime</text>
+  <text x="65" y="378" fill="#48cae4" font-size="9">wiki_list / wiki_stats /</text>
+  <text x="65" y="390" fill="#48cae4" font-size="9">wiki_health hit this cache</text>
+
+  <!-- Cache HIT arrow -->
+  <line x1="255" y1="340" x2="295" y2="340" stroke="#06d6a0" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <rect x="298" y="322" width="110" height="36" rx="2" fill="#0d1f3c" stroke="#06d6a0" stroke-width="1"/>
+  <text x="353" y="335" fill="#caf0f8" font-size="9" text-anchor="middle">→ RETURN cached</text>
+  <text x="353" y="349" fill="#06d6a0" font-size="9" text-anchor="middle">→ response</text>
+
+  <!-- ============================================================ -->
+  <!-- PATH B: P3 — OpenViking Fast-Fail                          -->
+  <!-- ============================================================ -->
+  <rect x="440" y="248" width="420" height="160" rx="2" fill="none" stroke="#f77f00" stroke-width="1" stroke-dasharray="6,3"/>
+  <text x="455" y="265" fill="#f77f00" font-size="10" font-weight="700">PATH B — P3: OPENV KING SEARCH + FAST-FAIL</text>
+  <text x="455" y="278" fill="#48cae4" font-size="9">Used by: wiki_search</text>
+
+  <!-- OV attempt box -->
+  <rect x="455" y="288" width="180" height="52" rx="2" fill="#0d1f3c" stroke="#f77f00" stroke-width="1"/>
+  <text x="467" y="305" fill="#f77f00" font-size="10" font-weight="700">Try OpenViking</text>
+  <text x="467" y="318" fill="#caf0f8" font-size="9">语义搜索  (embedding)</text>
+  <text x="467" y="331" fill="#caf0f8" font-size="9">Timeout: 3s  →  FAIL</text>
+
+  <!-- Backoff box -->
+  <rect x="650" y="288" width="195" height="52" rx="2" fill="#0d1f3c" stroke="#90e0ef" stroke-width="1" stroke-dasharray="4,2"/>
+  <text x="662" y="305" fill="#90e0ef" font-size="10" font-weight="700">Backoff Flag</text>
+  <text x="662" y="318" fill="#caf0f8" font-size="9">_ov_backoff_until = now + 60s</text>
+  <text x="662" y="331" fill="#caf0f8" font-size="9">Skip OV, use fallback</text>
+
+  <!-- Arrow: attempt → backoff -->
+  <line x1="635" y1="314" x2="648" y2="314" stroke="#f77f00" stroke-width="1" marker-end="url(#arrow-orange)"/>
+  <text x="641" y="308" fill="#f77f00" font-size="8" text-anchor="middle">timeout</text>
+
+  <!-- Fallback box -->
+  <rect x="455" y="352" width="180" height="44" rx="2" fill="#0d1f3c" stroke="#90e0ef" stroke-width="1"/>
+  <text x="467" y="369" fill="#90e0ef" font-size="10" font-weight="700">Fallback Scan</text>
+  <text x="467" y="383" fill="#caf0f8" font-size="9">关键词 / regex 文件扫描</text>
+
+  <!-- Result merge -->
+  <line x1="635" y1="376" x2="665" y2="376" stroke="#90e0ef" stroke-width="1" marker-end="url(#arrow-gray)"/>
+  <line x1="455" y1="374" x2="665" y2="374" stroke="#90e0ef" stroke-width="1"/>
+  <rect x="668" y="358" width="185" height="36" rx="2" fill="#0d1f3c" stroke="#90e0ef" stroke-width="1"/>
+  <text x="760" y="371" fill="#caf0f8" font-size="9" text-anchor="middle">→ merged results</text>
+  <text x="760" y="384" fill="#48cae4" font-size="9" text-anchor="middle">→ response</text>
+
+  <!-- ============================================================ -->
+  <!-- PATH C: P0 + P2 — File Scan + Entity Registry Cache        -->
+  <!-- ============================================================ -->
+  <rect x="840" y="248" width="100" height="160" rx="2" fill="none" stroke="#00b4d8" stroke-width="1" stroke-dasharray="6,3"/>
+  <text x="890" y="265" fill="#00b4d8" font-size="9" text-anchor="middle" font-weight="700">PATH C</text>
+
+  <!-- P0 label vertical -->
+  <text x="955" y="320" fill="#00b4d8" font-size="9" text-anchor="end" transform="rotate(-90,955,320)">P0: _CONTENT_DIRS whitelist</text>
+
+  <!-- ============================================================ -->
+  <!-- SHARED: P0 — Directory Whitelist                           -->
+  <!-- ============================================================ -->
+  <rect x="40" y="420" width="880" height="90" rx="2" fill="#0d1f3c" stroke="#00b4d8" stroke-width="1.5"/>
+  <text x="55" y="438" fill="#00b4d8" font-size="11" font-weight="700">P0: _CONTENT_DIRS — Directory Whitelist  (replaces rglob "*.md" over full src/)</text>
+  <text x="55" y="453" fill="#48cae4" font-size="9">避免扫描: agency-agents/ · logs/ · articles/ · src/ 等 185 个无关文件</text>
+
+  <!-- 9 whitelisted dirs as tags -->
+  <rect x="55" y="462" width="105" height="22" rx="2" fill="#0d1f3c" stroke="#06d6a0" stroke-width="1"/>
+  <text x="107" y="477" fill="#06d6a0" font-size="9" text-anchor="middle">concepts/</text>
+  <rect x="165" y="462" width="75" height="22" rx="2" fill="#0d1f3c" stroke="#06d6a0" stroke-width="1"/>
+  <text x="202" y="477" fill="#06d6a0" font-size="9" text-anchor="middle">entities/</text>
+  <rect x="245" y="462" width="72" height="22" rx="2" fill="#0d1f3c" stroke="#06d6a0" stroke-width="1"/>
+  <text x="281" y="477" fill="#06d6a0" font-size="9" text-anchor="middle">people/</text>
+  <rect x="322" y="462" width="82" height="22" rx="2" fill="#0d1f3c" stroke="#06d6a0" stroke-width="1"/>
+  <text x="363" y="477" fill="#06d6a0" font-size="9" text-anchor="middle">projects/</text>
+  <rect x="409" y="462" width="85" height="22" rx="2" fill="#0d1f3c" stroke="#06d6a0" stroke-width="1"/>
+  <text x="451" y="477" fill="#06d6a0" font-size="9" text-anchor="middle">meetings/</text>
+  <rect x="499" y="462" width="65" height="22" rx="2" fill="#0d1f3c" stroke="#06d6a0" stroke-width="1"/>
+  <text x="531" y="477" fill="#06d6a0" font-size="9" text-anchor="middle">ideas/</text>
+  <rect x="569" y="462" width="100" height="22" rx="2" fill="#0d1f3c" stroke="#06d6a0" stroke-width="1"/>
+  <text x="619" y="477" fill="#06d6a0" font-size="9" text-anchor="middle">comparisons/</text>
+  <rect x="674" y="462" width="75" height="22" rx="2" fill="#0d1f3c" stroke="#06d6a0" stroke-width="1"/>
+  <text x="711" y="477" fill="#06d6a0" font-size="9" text-anchor="middle">queries/</text>
+  <rect x="754" y="462" width="58" height="22" rx="2" fill="#0d1f3c" stroke="#06d6a0" stroke-width="1"/>
+  <text x="783" y="477" fill="#06d6a0" font-size="9" text-anchor="middle">tools/</text>
+
+  <!-- Excluded note -->
+  <rect x="820" y="462" width="90" height="22" rx="2" fill="#0d1f3c" stroke="#f77f00" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="865" y="477" fill="#f77f00" font-size="8" text-anchor="middle">✗ 185 files</text>
+
+  <!-- Page count badge -->
+  <text x="885" y="438" fill="#caf0f8" font-size="10" text-anchor="end">22 pages</text>
+  <text x="885" y="453" fill="#48cae4" font-size="9" text-anchor="end">↓ from ~300</text>
+
+  <!-- ============================================================ -->
+  <!-- SHARED: P2 — Entity Registry Cache                         -->
+  <!-- ============================================================ -->
+  <rect x="40" y="520" width="880" height="70" rx="2" fill="#0d1f3c" stroke="#00b4d8" stroke-width="1.5"/>
+  <text x="55" y="538" fill="#00b4d8" font-size="11" font-weight="700">P2: ENTITY REGISTRY IN-MEMORY CACHE  (entity_registry.py)</text>
+  <text x="55" y="553" fill="#48cae4" font-size="9">mtime-based invalidation  ·  save_registry() auto-invalidates  ·  18 entities · 132 aliases</text>
+
+  <!-- Registry cache box -->
+  <rect x="55" y="560" width="240" height="24" rx="2" fill="#0d1f3c" stroke="#06d6a0" stroke-width="1"/>
+  <text x="175" y="576" fill="#06d6a0" font-size="9" text-anchor="middle">_registry_cache = load_registry() + mtime</text>
+
+  <!-- Cache hit arrow -->
+  <line x1="295" y1="572" x2="335" y2="572" stroke="#06d6a0" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <rect x="338" y="556" width="130" height="32" rx="2" fill="#0d1f3c" stroke="#06d6a0" stroke-width="1"/>
+  <text x="403" y="569" fill="#caf0f8" font-size="9" text-anchor="middle">→ Cache HIT</text>
+  <text x="403" y="581" fill="#06d6a0" font-size="9" text-anchor="middle">→ entity_resolve()</text>
+
+  <!-- mtime check -->
+  <text x="540" y="569" fill="#90e0ef" font-size="9">mtime OK?</text>
+  <line x1="490" y1="572" x2="530" y2="572" stroke="#90e0ef" stroke-width="1" marker-end="url(#arrow-gray)"/>
+  <text x="490" y="565" fill="#90e0ef" font-size="8" text-anchor="middle">if mtime changed</text>
+
+  <!-- save invalidates -->
+  <rect x="560" y="556" width="160" height="32" rx="2" fill="#0d1f3c" stroke="#f77f00" stroke-width="1"/>
+  <text x="640" y="569" fill="#f77f00" font-size="9" text-anchor="middle">save_registry()</text>
+  <text x="640" y="581" fill="#caf0f8" font-size="9" text-anchor="middle">→ invalidates cache</text>
+  <line x1="720" y1="572" x2="745" y2="572" stroke="#f77f00" stroke-width="1" marker-end="url(#arrow-orange)"/>
+  <text x="732" y="565" fill="#f77f00" font-size="8" text-anchor="middle">write</text>
+
+  <!-- Excluded files note -->
+  <rect x="760" y="556" width="150" height="32" rx="2" fill="#0d1f3c" stroke="#f77f00" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="835" y="569" fill="#f77f00" font-size="9" text-anchor="middle">NOT cached:</text>
+  <text x="835" y="581" fill="#caf0f8" font-size="9" text-anchor="middle">logs/ · articles/</text>
+
+  <!-- Title block bottom-right -->
+  <rect x="700" y="595" width="240" height="38" fill="#0d1f3c" stroke="#00b4d8" stroke-width="1"/>
+  <line x1="700" y1="610" x2="940" y2="610" stroke="#00b4d8" stroke-width="0.5"/>
+  <text x="820" y="608" fill="#48cae4" font-size="9" text-anchor="middle">WIKI-BRAIN OPTIMIZATION</text>
+  <text x="820" y="625" fill="#caf0f8" font-size="11" font-weight="700" text-anchor="middle">P0 · P1 · P2 · P3  v1.0</text>
+</svg>
