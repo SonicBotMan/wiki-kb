@@ -11,6 +11,8 @@ import re
 import uuid
 import logging
 import signal
+import tempfile
+import fcntl
 from pathlib import Path
 from datetime import datetime
 
@@ -68,94 +70,22 @@ OPENVIKING_USER = os.environ.get("OPENVIKING_USER", "default")
 # ============================================================
 # 3. 导入 entity_registry 模块
 # ============================================================
+# 3. Import entity_registry module
+# ============================================================
 sys.path.insert(0, str(WIKI_ROOT / "scripts"))
+_REGISTRY_AVAILABLE = False
+_REGISTRY_IMPORT_ERROR = ""
 try:
     import entity_registry
+    _REGISTRY_AVAILABLE = True
 except ImportError as e:
-    print(f"警告: 无法导入 entity_registry 模块: {e}", file=sys.stderr)
-    # 提供一个 stub
-    class entity_registry:
-        @staticmethod
-        def load_registry():
-            if REGISTRY_FILE.exists():
-                with open(REGISTRY_FILE, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            return {"entities": {}, "alias_index": {}, "page_index": {}, "stats": {}}
-
-        @staticmethod
-        def save_registry(reg):
-            REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
-            tmp = REGISTRY_FILE.with_suffix(".tmp")
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(reg, f, ensure_ascii=False, indent=2)
-            tmp.rename(REGISTRY_FILE)
-
-        @staticmethod
-        def resolve(name):
-            reg = entity_registry.load_registry()
-            norm = name.lower().strip()
-            entity_id = reg["alias_index"].get(norm)
-            if entity_id:
-                return reg["entities"].get(entity_id)
-            for e in reg["entities"].values():
-                if e.get("canonical_name", "").lower().strip() == norm:
-                    return e
-            return None
-
-        @staticmethod
-        def register(name, entity_type, page_path="", aliases=None, reg=None):
-            should_save = reg is None
-            if reg is None:
-                reg = entity_registry.load_registry()
-            now = datetime.now().strftime("%Y-%m-%d")
-            entity_id = f"ent_{uuid.uuid4().hex[:6]}"
-            new_entity = {
-                "id": entity_id,
-                "canonical_name": name.strip(),
-                "aliases": aliases or [],
-                "type": entity_type,
-                "primary_page": page_path,
-                "related_pages": [],
-                "created": now,
-                "updated": now,
-                "metadata": {}
-            }
-            reg["entities"][entity_id] = new_entity
-            if page_path:
-                reg["page_index"][page_path] = entity_id
-            reg["stats"]["total_entities"] = len(reg["entities"])
-            if should_save:
-                entity_registry.save_registry(reg)
-            return new_entity
-
-        @staticmethod
-        def merge(entity_id, into_id):
-            reg = entity_registry.load_registry()
-            if entity_id not in reg["entities"] or into_id not in reg["entities"]:
-                return False
-            target = reg["entities"][into_id]
-            source = reg["entities"][entity_id]
-            for alias in source.get("aliases", []):
-                if alias not in target["aliases"]:
-                    target["aliases"].append(alias)
-                    reg["alias_index"][alias] = into_id
-            for page in source.get("related_pages", []):
-                if page not in target["related_pages"]:
-                    target["related_pages"].append(page)
-            if source.get("primary_page"):
-                target["related_pages"].append(source["primary_page"])
-            target["updated"] = datetime.now().strftime("%Y-%m-%d")
-            for alias in source.get("aliases", []):
-                if reg["alias_index"].get(alias) == entity_id:
-                    del reg["alias_index"][alias]
-            del reg["entities"][entity_id]
-            entity_registry.save_registry(reg)
-            return True
-
-        @staticmethod
-        def get_all_entities():
-            reg = entity_registry.load_registry()
-            return list(reg["entities"].values())
+    _REGISTRY_IMPORT_ERROR = str(e)
+    _logger.error(
+        "entity_registry module import failed: %s — "
+        "Entity-related tools will be unavailable. "
+        "Check that /app/scripts/entity_registry.py exists.",
+        e
+    )
 
 # ============================================================
 # 4. 路径安全工具
@@ -204,6 +134,49 @@ def _validate_type(entity_type: str) -> str:
     return normalized
 
 
+def _safe_write(path: Path, content: str):
+    """Atomic write: tmpfile + fsync + rename. Prevents corruption on crash."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(
+        dir=str(path.parent), suffix=".tmp", prefix=f".{path.stem}_"
+    )
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        os.rename(tmp_path, str(path))
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+class _FileLock:
+    """File-based lock using fcntl.flock for concurrent write protection."""
+
+    def __init__(self, path: Path):
+        self.lock_path = path.with_suffix(".lock")
+        self._fd = None
+
+    def __enter__(self):
+        self._fd = os.open(str(self.lock_path), os.O_CREAT | os.O_RDWR)
+        fcntl.flock(self._fd, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self._fd is not None:
+            try:
+                fcntl.flock(self._fd, fcntl.LOCK_UN)
+                os.close(self._fd)
+            except OSError:
+                pass
+        return False
+
+
+
 # ============================================================
 # 5. Wiki 工具函数
 # ============================================================
@@ -240,14 +213,14 @@ def _resolve_page_path(page_id: str) -> Optional[Path]:
         if '-' in page_id or '_' in page_id:
             for f in (WIKI_ROOT / subdir).glob("*"):
                 if f.stem.replace('-', '').replace('_', '') == page_id.replace('-', '').replace('_', ''):
-                    return f
+                    return _validate_path(f)
 
     # 搜索所有 .md 文件
     for f in WIKI_ROOT.rglob("*.md"):
         if _is_excluded(f):
             continue
         if f.stem == page_id or f.stem.replace('-', '') == page_id.replace('-', ''):
-            return f
+            return _validate_path(f)
 
     return None
 
@@ -423,8 +396,8 @@ def _fallback_file_search(query: str, type_filter: str = "") -> List[Dict]:
                     "page_path": str(rel_path),
                     "summary": body[:200].replace('\n', ' ').strip() if body else ""
                 })
-        except Exception:
-            continue
+        except Exception as e:
+            _logger.warning("Failed to read page %s: %s: %s", md_file.name, type(e).__name__, e)
 
     return results
 
@@ -557,19 +530,32 @@ status: {status}
 """
 
     page_path.parent.mkdir(parents=True, exist_ok=True)
-    page_path.write_text(page_content, encoding='utf-8')
 
-    # 注册到 Entity Registry
+    with _FileLock(page_path):
+        if page_path.exists():
+            raise ValueError(f"Page already exists: {page_path}")
+        _safe_write(page_path, page_content)
+
+    # Entity registration: register if available, degrade if not
     rel_path = str(page_path.relative_to(WIKI_ROOT))
-    entity = entity_registry.register(
-        name=name,
-        entity_type=type,
-        page_path=rel_path
-    )
+    entity_id = None
+
+    if _REGISTRY_AVAILABLE:
+        try:
+            entity = entity_registry.register(
+                name=name,
+                entity_type=type,
+                page_path=rel_path
+            )
+            entity_id = entity.get("id")
+        except Exception as e:
+            _logger.warning("Entity registration failed (page created %s): %s", rel_path, e)
+    else:
+        _logger.warning("entity_registry unavailable, skipping registration (page: %s)", rel_path)
 
     return {
         "page_path": rel_path,
-        "entity_id": entity.get("id"),
+        "entity_id": entity_id,
         "title": name,
         "type": type
     }
@@ -578,44 +564,55 @@ status: {status}
 @mcp.tool()
 def wiki_update(page_id: str, section: str, content: str) -> Dict:
     """
-    更新指定 section（executive_summary / key_facts / relations）。
-    Timeline section 自动 append，不覆盖。
-    返回 {page_path, updated_sections}
+    Update a section (Executive Summary / Key Facts / Relations).
+    Timeline is append-only — use wiki_append_timeline() instead.
+    Returns {page_path, updated_sections}
     """
     path = _resolve_page_path(page_id)
     if not path:
-        raise ValueError(f"页面未找到: {page_id}")
+        raise ValueError(f"Page not found: {page_id}")
 
-    original = path.read_text(encoding='utf-8')
-    fm, body = _get_frontmatter(original)
+    section_normalized = section.strip().lower()
 
-    # 更新 body 中的 section
-    if section.lower() == "timeline":
-        # Timeline 追加模式
-        new_body = body.rstrip()
-        if not new_body.endswith('\n'):
-            new_body += '\n'
-        new_body += f"\n- **{datetime.now().strftime('%Y-%m-%d')}** | {content}\n"
-        body = new_body
-    else:
-        body = _update_section(body, section, content)
+    # Timeline: always reject, guide to dedicated API
+    if section_normalized == "timeline":
+        raise ValueError(
+            "Cannot update Timeline via wiki_update (Timeline is append-only). "
+            "Use wiki_append_timeline(page_id, event, source) instead."
+        )
 
-    # 更新 frontmatter 中的 updated 日期
-    fm['updated'] = datetime.now().strftime("%Y-%m-%d")
+    # Section whitelist
+    UPDATABLE_SECTIONS = {
+        "executive summary": "Executive Summary",
+        "key facts": "Key Facts",
+        "relations": "Relations",
+    }
+    canonical_section = UPDATABLE_SECTIONS.get(section_normalized)
+    if canonical_section is None:
+        raise ValueError(
+            f"Cannot update section '{section}'. "
+            f"Allowed: {list(UPDATABLE_SECTIONS.values())}. "
+            f"For Timeline, use wiki_append_timeline."
+        )
 
-    # 重新组装
-    fm_lines = [f"{k}: {v}" for k, v in fm.items()]
-    new_content = f"---\n" + "\n".join(fm_lines) + "\n---\n" + body
+    with _FileLock(path):
+        original = path.read_text(encoding='utf-8')
+        fm, body = _get_frontmatter(original)
 
-    path.write_text(new_content, encoding='utf-8')
+        body = _update_section(body, canonical_section, content)
+
+        fm['updated'] = datetime.now().strftime("%Y-%m-%d")
+        fm_lines = [f"{k}: {v}" for k, v in fm.items()]
+        new_content = f"---\n" + "\n".join(fm_lines) + "\n---\n" + body
+
+        _safe_write(path, new_content)
 
     rel_path = str(path.relative_to(WIKI_ROOT))
     return {
         "page_path": rel_path,
-        "updated_sections": [section],
+        "updated_sections": [canonical_section],
         "section_content": content
     }
-
 
 @mcp.tool()
 def wiki_append_timeline(page_id: str, event: str, source: str = "") -> Dict:
@@ -663,11 +660,13 @@ def wiki_append_timeline(page_id: str, event: str, source: str = "") -> Dict:
     # 更新 frontmatter
     fm['updated'] = now
 
-    # 重新组装
+    # Reassemble
     fm_lines = [f"{k}: {v}" for k, v in fm.items()]
     new_content = f"---\n" + "\n".join(fm_lines) + "\n---\n" + body
 
-    path.write_text(new_content, encoding='utf-8')
+    with _FileLock(path):
+        _safe_write(path, new_content)
+
 
     rel_path = str(path.relative_to(WIKI_ROOT))
     return {
@@ -712,8 +711,8 @@ def wiki_list(type: str = "", status: str = "") -> List[Dict]:
                 "updated": fm.get('updated', ''),
                 "page_path": str(md_file.relative_to(WIKI_ROOT))
             })
-        except Exception:
-            continue
+        except Exception as e:
+            _logger.warning("Failed to read page %s: %s: %s", md_file.name, type(e).__name__, e)
 
     return pages
 
@@ -728,6 +727,8 @@ def entity_resolve(name: str) -> Optional[Dict]:
     通过名称或别名解析实体。
     返回 {id, canonical_name, aliases, type, primary_page}
     """
+    if not _REGISTRY_AVAILABLE:
+        raise RuntimeError(f"entity_registry module unavailable: {_REGISTRY_IMPORT_ERROR}")
     entity = entity_registry.resolve(name)
     if entity:
         return {
@@ -746,6 +747,8 @@ def entity_register(name: str, type: str, aliases: List[str] = None) -> Dict:
     注册新实体。
     返回 {id, canonical_name, aliases}
     """
+    if not _REGISTRY_AVAILABLE:
+        raise RuntimeError(f"entity_registry module unavailable: {_REGISTRY_IMPORT_ERROR}")
     type = _validate_type(type)
     entity = entity_registry.register(
         name=name,
@@ -766,6 +769,8 @@ def entity_list(type: str = "") -> List[Dict]:
     可选按 type 过滤。
     返回实体列表。
     """
+    if not _REGISTRY_AVAILABLE:
+        raise RuntimeError(f"entity_registry module unavailable: {_REGISTRY_IMPORT_ERROR}")
     entities = entity_registry.get_all_entities()
     if type:
         entities = [e for e in entities if e.get("type") == type]
@@ -790,6 +795,8 @@ def entity_merge(id1: str, id2: str) -> Dict:
     id1 被合并到 id2，id1 删除。
     返回合并结果。
     """
+    if not _REGISTRY_AVAILABLE:
+        raise RuntimeError(f"entity_registry module unavailable: {_REGISTRY_IMPORT_ERROR}")
     success = entity_registry.merge(id1, id2)
     if success:
         return {
@@ -830,8 +837,8 @@ def wiki_stats() -> Dict:
             fm, _ = _get_frontmatter(content)
             ptype = fm.get('type', 'unknown')
             page_counts[ptype] = page_counts.get(ptype, 0) + 1
-        except Exception:
-            continue
+        except Exception as e:
+            _logger.warning("Failed to read page %s: %s: %s", md_file.name, type(e).__name__, e)
 
     # Registry 统计
     reg = entity_registry.load_registry()
@@ -962,6 +969,17 @@ def _signal_handler(signum, frame):
 if __name__ == "__main__":
     signal.signal(signal.SIGTERM, _signal_handler)
     signal.signal(signal.SIGINT, _signal_handler)
+
+    # Security warning if no auth configured
+    _mcp_port = os.environ.get("MCP_PORT", "8764")
+    if not os.environ.get("MCP_API_KEY", ""):
+        _logger.warning(
+            "MCP_API_KEY is NOT set — MCP Server has NO authentication! "
+            "Anyone who can reach port %s can read/write the wiki. "
+            "Set MCP_API_KEY env var if this is not a trusted LAN.",
+            _mcp_port
+        )
+
     _logger.info("Wiki Brain MCP Server 启动 (WIKI_ROOT=%s, port=%s)", 
                 WIKI_ROOT, os.environ.get("MCP_PORT", "8764"))
     mcp.run(transport="streamable-http")
