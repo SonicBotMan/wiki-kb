@@ -14,11 +14,7 @@ python -m py_compile scripts/wiki_mcp_server.py && \
 python -m py_compile scripts/wiki_utils.py && \
 echo "✅ Lint passed" || { echo "❌ Lint failed"; exit 1; }
 
-# Tests (only if pytest available)
-if command -v pytest &>/dev/null; then
-    pytest tests/ -v --tb=short || { echo "❌ Tests failed"; exit 1; }
-else
-    echo "⚠️  pytest not found, skipping tests"
-fi
+# Tests
+python -m pytest tests/ -v --tb=short || { echo "❌ Tests failed"; exit 1; }
 
 echo "✅ Pre-push checks passed"

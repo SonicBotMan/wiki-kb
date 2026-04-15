@@ -5,7 +5,15 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+
 import pytest
+
+def pytest_configure(config):
+    """Add scripts/ to sys.path before test collection."""
+    scripts_dir = str(Path(__file__).parent.parent / "scripts")
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+
 
 
 def _create_wiki_root(tmp_path):
@@ -76,8 +84,8 @@ def mcp_module(tmp_path):
             mod.REGISTRY_FILE = root / "registry.json"
             yield mod, root
         finally:
-            if scripts_dir in sys.path:
-                sys.path.remove(scripts_dir)
+            # Don't remove scripts_dir from sys.path — other tests need it.
+            # Only clean up module cache to allow fresh imports.
             mods_to_remove = [m for m in sys.modules if m.startswith("wiki_mcp_server")]
             for m in mods_to_remove:
                 del sys.modules[m]

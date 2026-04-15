@@ -1,7 +1,7 @@
 .PHONY: test lint pre-push
 
 test:
-	PYTHONPATH=scripts python -m pytest tests/ -v --tb=short
+	python -m pytest tests/ -v --tb=short
 
 lint:
 	python -m py_compile scripts/wiki_mcp_server.py
