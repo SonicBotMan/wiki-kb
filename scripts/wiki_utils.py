@@ -8,6 +8,30 @@ import re
 import datetime
 import yaml
 
+# ============================================================
+# Shared directory and type constants
+# ============================================================
+
+# Maps entity types → wiki subdirectory names
+TYPE_DIR_MAP = {
+    "person": "people",
+    "project": "projects",
+    "entity": "entities",
+    "concept": "concepts",
+    "meeting": "meetings",
+    "idea": "ideas",
+    "comparison": "comparisons",
+    "query": "queries",
+    "tool": "tools",
+}
+
+# Set of all valid wiki subdirectory names
+ALLOWED_SUBDIRS = set(TYPE_DIR_MAP.values())
+
+# Set of all valid entity/page types
+ALLOWED_TYPES = set(TYPE_DIR_MAP.keys())
+
+
 
 def get_frontmatter(content: str) -> tuple:
     """提取 markdown 文件的 frontmatter (YAML) 和正文。

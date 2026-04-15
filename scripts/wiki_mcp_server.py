@@ -71,7 +71,7 @@ OPENVIKING_USER = os.environ.get("OPENVIKING_USER", "default")
 # 3. Import entity_registry module
 # ============================================================
 sys.path.insert(0, str(WIKI_ROOT / "scripts"))
-from wiki_utils import get_frontmatter as _get_frontmatter
+from wiki_utils import get_frontmatter as _get_frontmatter, TYPE_DIR_MAP, ALLOWED_SUBDIRS, ALLOWED_TYPES
 
 _REGISTRY_AVAILABLE = False
 _REGISTRY_IMPORT_ERROR = ""
@@ -92,14 +92,7 @@ except ImportError as e:
 # ============================================================
 
 # 允许的 wiki 子目录白名单
-_ALLOWED_SUBDIRS = {'concepts', 'entities', 'people', 'projects', 
-                    'meetings', 'ideas', 'comparisons', 'queries', 'tools'}
 # 允许的 entity/page 类型
-_ALLOWED_TYPES = {'person', 'project', 'entity', 'concept', 
-                  'meeting', 'idea', 'comparison', 'query', 'tool'}
-
-
-
 # 扫描时排除的目录（系统产物、原始文件，非 wiki 内容）
 _EXCLUDE_DIRS = {'dream-reports', 'raw', 'src', 'logs', 'scripts', '.git',
                  'assets', 'papers', 'transcripts', 'articles',
@@ -129,8 +122,8 @@ def _validate_path(path: Path) -> Path:
 def _validate_type(entity_type: str) -> str:
     """验证 entity/page 类型是否合法。"""
     normalized = entity_type.lower().strip()
-    if normalized not in _ALLOWED_TYPES:
-        raise ValueError(f"Invalid type: '{entity_type}'. Allowed: {_ALLOWED_TYPES}")
+    if normalized not in ALLOWED_TYPES:
+        raise ValueError(f"Invalid type: '{entity_type}'. Allowed: {ALLOWED_TYPES}")
     return normalized
 
 
@@ -205,7 +198,7 @@ def _resolve_page_path(page_id: str) -> Optional[Path]:
             return _validate_path(path)
 
     # 搜索所有子目录
-    for subdir in ['concepts', 'entities', 'people', 'projects', 'meetings', 'ideas', 'comparisons', 'queries', 'tools']:
+    for subdir in sorted(ALLOWED_SUBDIRS):
         path = WIKI_ROOT / subdir / f"{page_id}.md"
         if path.exists():
             return _validate_path(path)
@@ -457,19 +450,9 @@ def wiki_create(name: str, type: str, description: str, content: str = "", statu
         raise ValueError("Content too large: description max 500KB, content max 1MB")
     
     # 确定目录
-    type_dir_map = {
-        "person": "people",
-        "project": "projects",
-        "entity": "entities",
-        "concept": "concepts",
-        "meeting": "meetings",
-        "idea": "ideas",
-        "comparison": "comparisons",
-        "query": "queries",
-        "tool": "tools"
-    }
 
-    subdir = type_dir_map.get(type.lower(), "concepts")
+
+    subdir = TYPE_DIR_MAP.get(type.lower(), "concepts")
     slug = _slugify(name)
     page_path = WIKI_ROOT / subdir / f"{slug}.md"
 
@@ -502,15 +485,15 @@ status: {status}
 -
 
 ## Relations
-| 关系 | 目标 | 说明 |
-|------|------|------|
+| Relation | Target | Note |
+|----------|--------|------|
 | related | [[]] | |
 
 ---
 
 ## Timeline
 
-- **{now}** | 页面创建
+- **{now}** | Page created
   [Source: wiki_mcp_server]
 """
 
@@ -521,7 +504,7 @@ status: {status}
             raise ValueError(f"Page already exists: {page_path}")
         _safe_write(page_path, page_content)
 
-    # Entity registration: register if available, degrade if not
+    # Entity registration: register if available, rollback on failure
     rel_path = str(page_path.relative_to(WIKI_ROOT))
     entity_id = None
 
@@ -534,7 +517,17 @@ status: {status}
             )
             entity_id = entity.get("id")
         except Exception as e:
-            _logger.warning("Entity registration failed (page created %s): %s", rel_path, e)
+            _logger.warning("Entity registration failed, rolling back page %s: %s", rel_path, e)
+            # Rollback: remove created page since entity is broken
+            try:
+                page_path.unlink()
+                _logger.info("Rolled back page: %s", rel_path)
+            except OSError as del_err:
+                _logger.error("Rollback failed for %s: %s", rel_path, del_err)
+            raise RuntimeError(
+                f"wiki_create failed: entity registration error ({e}). "
+                f"Page rolled back. Check entity_registry."
+            ) from e
     else:
         _logger.warning("entity_registry unavailable, skipping registration (page: %s)", rel_path)
 
@@ -544,8 +537,6 @@ status: {status}
         "title": name,
         "type": type
     }
-
-
 @mcp.tool()
 def wiki_update(page_id: str, section: str, content: str) -> Dict:
     """
@@ -788,7 +779,7 @@ def entity_merge(id1: str, id2: str) -> Dict:
             "success": True,
             "merged_id": id1,
             "into_id": id2,
-            "message": f"实体 {id1} 已合并到 {id2}"
+            "message": f"Entity {id1} merged into {id2}"
         }
     else:
         return {
@@ -845,46 +836,52 @@ def wiki_stats() -> Dict:
 @mcp.tool()
 def wiki_health() -> Dict:
     """
-    健康检查：验证 wiki 核心依赖状态。
-    返回 {status, checks: [{name, status, message}]}
+    Health check: verify wiki core dependencies status.
+    Returns {status, checks: [{name, status, message}]}
     """
     import time
     checks = []
 
-    # 1. Registry 文件完整性
+    # 1. Registry file integrity
     try:
         if REGISTRY_FILE.exists():
             with open(REGISTRY_FILE, "r", encoding="utf-8") as f:
-                json.load(f)  # 验证 JSON
-            checks.append({"name": "registry", "status": "ok", "message": "registry.json 完整"})
+                json.load(f)
+            checks.append({"name": "registry", "status": "ok", "message": "registry.json intact"})
         else:
-            checks.append({"name": "registry", "status": "ok", "message": "registry.json 不存在（将首次创建）"})
+            checks.append({"name": "registry", "status": "ok", "message": "registry.json missing (will be created on first write)"})
     except (json.JSONDecodeError, IOError) as e:
-        checks.append({"name": "registry", "status": "error", "message": f"registry.json 损坏: {e}"})
+        checks.append({"name": "registry", "status": "error", "message": f"registry.json corrupted: {e}"})
 
-    # 2. Wiki 目录可写
+    # 2. Entity registry availability
+    if _REGISTRY_AVAILABLE:
+        checks.append({"name": "entity_registry", "status": "ok", "message": "entity_registry module loaded"})
+    else:
+        checks.append({"name": "entity_registry", "status": "warning", "message": f"entity_registry unavailable: {_REGISTRY_IMPORT_ERROR}"})
+
+    # 3. Wiki directory writable
     try:
         test_file = WIKI_ROOT / ".health_check_tmp"
         test_file.write_text("ok", encoding="utf-8")
         test_file.unlink()
-        checks.append({"name": "disk_writable", "status": "ok", "message": f"可写: {WIKI_ROOT}"})
+        checks.append({"name": "disk_writable", "status": "ok", "message": f"writable: {WIKI_ROOT}"})
     except Exception as e:
         checks.append({"name": "disk_writable", "status": "error", "message": str(e)})
 
-    # 3. 磁盘空间
+    # 4. Disk space
     try:
         stat = os.statvfs(str(WIKI_ROOT))
         free_pct = (stat.f_bavail / stat.f_blocks) * 100
         if free_pct < 10:
-            checks.append({"name": "disk_space", "status": "warning", 
-                          "message": f"磁盘空间不足: {free_pct:.1f}% 可用"})
+            checks.append({"name": "disk_space", "status": "warning",
+                           "message": f"Low disk space: {free_pct:.1f}% available"})
         else:
-            checks.append({"name": "disk_space", "status": "ok", 
-                          "message": f"磁盘空间充足: {free_pct:.1f}% 可用"})
+            checks.append({"name": "disk_space", "status": "ok",
+                           "message": f"Disk space OK: {free_pct:.1f}% available"})
     except Exception as e:
         checks.append({"name": "disk_space", "status": "error", "message": str(e)})
 
-    # 4. OpenViking 连通性
+    # 5. OpenViking connectivity
     try:
         import urllib.request
         start = time.time()
@@ -896,67 +893,41 @@ def wiki_health() -> Dict:
         with urllib.request.urlopen(req, timeout=5) as resp:
             if resp.status == 200:
                 ms = (time.time() - start) * 1000
-                checks.append({"name": "openviking", "status": "ok", 
-                              "message": f"OpenViking 可达 ({ms:.0f}ms)"})
+                checks.append({"name": "openviking", "status": "ok",
+                               "message": f"OpenViking reachable ({ms:.0f}ms)"})
             else:
-                checks.append({"name": "openviking", "status": "warning", 
-                              "message": f"OpenViking 返回 {resp.status}"})
+                checks.append({"name": "openviking", "status": "warning",
+                               "message": f"OpenViking returned {resp.status}"})
     except Exception as e:
-        checks.append({"name": "openviking", "status": "degraded", 
-                      "message": f"OpenViking 不可达: {type(e).__name__}"})
+        checks.append({"name": "openviking", "status": "warning",
+                       "message": f"OpenViking unreachable: {type(e).__name__}"})
 
-    # 5. 页面文件数
+    # 6. Page count
     try:
-        page_count = sum(1 for f in WIKI_ROOT.rglob("*.md") 
-                        if f.name not in ['SCHEMA.md', 'RESOLVER.md', 'index.md', 'log.md']
-                        and not _is_excluded(f))
-        checks.append({"name": "pages", "status": "ok", 
-                      "message": f"{page_count} 个 wiki 页面"})
+        page_count = sum(1 for d in ALLOWED_SUBDIRS
+                        for f in (WIKI_ROOT / d).glob("*.md") if not f.name.startswith("."))
+        checks.append({"name": "pages", "status": "ok",
+                       "message": f"{page_count} wiki pages"})
     except Exception as e:
         checks.append({"name": "pages", "status": "error", "message": str(e)})
 
-    # 汇总状态
-    statuses = [c["status"] for c in checks]
-    if "error" in statuses:
-        overall = "unhealthy"
-    elif "warning" in statuses or "degraded" in statuses:
-        overall = "degraded"
-    else:
-        overall = "healthy"
-
+    overall = "healthy" if all(c["status"] in ("ok", "warning") for c in checks) else "unhealthy"
     return {
         "status": overall,
         "timestamp": datetime.now().isoformat(),
-        "checks": checks
+        "checks": checks,
     }
 
 
-# ============================================================
-# 9. Graceful Shutdown
-# ============================================================
-_shutdown_requested = False
-
-def _signal_handler(signum, frame):
-    """处理 SIGTERM/SIGINT，确保 in-flight 写入完成。"""
-    global _shutdown_requested
-    if _shutdown_requested:
-        _logger.warning("Duplicate shutdown signal (%s), forcing exit", signum)
-        sys.exit(1)
-    _shutdown_requested = True
-    _logger.info("Received signal %s, shutting down gracefully...", signum)
-    # FastMCP 的 uvicorn 会在下一次循环检测到 shutdown 标志后自动退出
-    sys.exit(0)
-
 
 # ============================================================
-# 10. 启动 Server
+# Entry point
 # ============================================================
 if __name__ == "__main__":
-    signal.signal(signal.SIGTERM, _signal_handler)
-    signal.signal(signal.SIGINT, _signal_handler)
-
-    # Security warning if no auth configured
+    import time as _time
     _mcp_port = os.environ.get("MCP_PORT", "8764")
+    
+    # Security warning if no auth configured
     if not os.environ.get("MCP_API_KEY", ""):
         _logger.warning(
             "MCP_API_KEY is NOT set — MCP Server has NO authentication! "
@@ -965,6 +936,17 @@ if __name__ == "__main__":
             _mcp_port
         )
 
-    _logger.info("Wiki Brain MCP Server starting (WIKI_ROOT=%s, port=%s)", 
-                WIKI_ROOT, os.environ.get("MCP_PORT", "8764"))
+    # Signal handlers for graceful shutdown
+    def _shutdown(signum, frame):
+        _logger.info("Received signal %s, shutting down gracefully...", signum)
+        import sys
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
+
+    _logger.info(
+        "Wiki Brain MCP Server starting (WIKI_ROOT=%s, port=%s)",
+        WIKI_ROOT, _mcp_port
+    )
     mcp.run(transport="streamable-http")
