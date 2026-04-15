@@ -36,7 +36,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 # 共享工具函数
 try:
-    from wiki_utils import get_frontmatter as parse_frontmatter, parse_relations_table as parse_relations
+    from wiki_utils import get_frontmatter as _get_frontmatter, parse_relations_table as parse_relations
+    def parse_frontmatter(content: str) -> dict:
+        """Wrapper: get_frontmatter returns (fm, body) tuple, we only want fm."""
+        fm, _ = _get_frontmatter(content)
+        return fm if isinstance(fm, dict) else {}
 except ImportError:
     # Fallback: 本地实现
     def parse_frontmatter(content: str) -> dict:

@@ -1,24 +1,27 @@
 #!/usr/bin/env python3
 """
-wiki-to-notion.py — Sync LLM Wiki pages between Local ↔ NAS (WebDAV) ↔ Notion.
+wiki-to-notion.py — Sync LLM Wiki pages to Notion.
 
 Storage architecture:
-  NAS WebDAV (<NAS_WEBDAV_URL>/) — authoritative storage
-  Local (~/wiki/) — working copy for fast read/write
+  NAS (~/wiki/) — authoritative storage
   Notion — read-only mirror for browsing
 
 Usage:
-  python wiki-to-notion.py [--all] [--type entity|concept|comparison|query] [--file path.md] [--dry-run]
-  python wiki-to-notion.py --sync          # Full sync: local wiki → Notion
-  python wiki-to-notion.py --list          # List sync status
+  python wiki-to-notion.py --sync [--dry-run] [--force] [--delete]
+  python wiki-to-notion.py --all [--dry-run] [--force]
+  python wiki-to-notion.py --type tool|concept|entity|... [--dry-run]
+  python wiki-to-notion.py --file path.md [--dry-run]
+  python wiki-to-notion.py --list
 
 Modes:
-  --all         Sync all wiki pages to Notion (check Wiki File property)
-  --type TYPE   Sync all pages of a specific type
+  --sync        Full pipeline: local wiki → Notion (with --delete by default)
+  --all         Sync all wiki pages to Notion
+  --type TYPE   Sync all pages from a specific directory
   --file PATH   Sync a single specific wiki page
   --dry-run     Show what would be synced without actually doing it
   --list        List sync status of all wiki pages
-  --sync        Full pipeline: local wiki → Notion (no NAS)
+  --force       Force re-sync all pages (ignore content hash)
+  --delete      Archive Notion pages whose local wiki file has been deleted
 """
 
 import argparse
@@ -49,7 +52,6 @@ if _dotenv_path.exists():
             key, _, value = line.partition("=")
             key = key.strip()
             value = value.strip().strip("\"'")
-            # Only set if not already in environment
             if key not in os.environ:
                 os.environ[key] = value
 
@@ -60,189 +62,52 @@ NOTION_KEY = os.environ.get("NOTION_API_KEY", "")
 NOTION_VERSION = "2022-06-28"
 API_BASE = "https://api.notion.com/v1"
 
-# NAS WebDAV config — read from env vars
-WEBDAV_BASE = os.environ.get("WEBDAV_BASE_URL", "")
-WEBDAV_USER = os.environ.get("WEBDAV_USER", "")
-WEBDAV_PASS = os.environ.get("WEBDAV_PASS", "")
-
 HEADERS = {
     "Authorization": f"Bearer {NOTION_KEY}",
     "Notion-Version": NOTION_VERSION,
     "Content-Type": "application/json",
 }
 
-# Sync state cache path
-SYNC_STATE_PATH = Path(os.path.expanduser("~/.wiki-sync.json"))
+# Databases that have a "Type" select property (for storing frontmatter type)
+# Only set Type property for these databases to avoid 400 errors
+DBS_WITH_TYPE_PROP = {"entity"}
 
-# --- Sync state cache ---
-
-def load_sync_state() -> dict:
-    """Load the sync state cache from disk."""
-    if SYNC_STATE_PATH.exists():
-        try:
-            return json.loads(SYNC_STATE_PATH.read_text())
-        except (json.JSONDecodeError, OSError):
-            pass
-    return {}
-
-def save_sync_state(state: dict) -> None:
-    """Persist the sync state cache to disk."""
-    try:
-        SYNC_STATE_PATH.write_text(json.dumps(state, indent=2))
-    except OSError as e:
-        print(f"  WARNING: Could not save sync state: {e}")
-
-# --- Hashing helper ---
-
-def file_hash(path: Path) -> str:
-    """Compute SHA-256 hex digest of a file."""
-    h = hashlib.sha256()
-    for chunk in path.open("rb"):
-        h.update(chunk)
-    return h.hexdigest()
-
-# --- WebDAV helpers ---
-
-def webdav_head(remote_rel: str) -> dict | None:
-    """HEAD request to get ETag and Last-Modified for a remote file.
-    Returns dict with 'etag' and 'last_modified' keys, or None if not found/error."""
-    url = f"{WEBDAV_BASE}/{remote_rel}"
-    try:
-        resp = requests.head(url, auth=(WEBDAV_USER, WEBDAV_PASS), timeout=15)
-        if resp.status_code in (200, 204):
-            return {
-                "etag": resp.headers.get("ETag", ""),
-                "last_modified": resp.headers.get("Last-Modified", ""),
-            }
-        return None
-    except Exception:
-        return None
-
-def webdav_upload(local_path: Path, remote_rel: str) -> bool:
-    """Upload a file to NAS WebDAV. remote_rel is relative to /wiki/."""
-    url = f"{WEBDAV_BASE}/{remote_rel}"
-    try:
-        resp = requests.put(url, data=local_path.read_bytes(),
-                          auth=(WEBDAV_USER, WEBDAV_PASS), timeout=30)
-        return resp.status_code in (200, 201, 204)
-    except Exception as e:
-        print(f"  WebDAV upload error: {e}")
-        return False
-
-def webdav_download(remote_rel: str, local_path: Path) -> bool:
-    """Download a file from NAS WebDAV."""
-    url = f"{WEBDAV_BASE}/{remote_rel}"
-    try:
-        resp = requests.get(url, auth=(WEBDAV_USER, WEBDAV_PASS), timeout=30)
-        if resp.status_code == 200:
-            local_path.parent.mkdir(parents=True, exist_ok=True)
-            local_path.write_bytes(resp.content)
-            return True
-        return False
-    except Exception as e:
-        print(f"  WebDAV download error: {e}")
-        return False
-
-def webdav_list(remote_dir: str = "", with_meta: bool = False) -> dict | list:
-    """List all files under a remote directory (recursive).
-    with_meta=True: returns {rel_path: {"etag": ..., "last_modified": ..., "size": ...}}
-    with_meta=False: returns [rel_path, ...] (backward compat)
-    """
-    import xml.etree.ElementTree as ET
-
-    url = f"{WEBDAV_BASE}/{remote_dir}"
-    try:
-        resp = requests.request("PROPFIND", url,
-                              auth=(WEBDAV_USER, WEBDAV_PASS),
-                              headers={"Depth": "infinity"},
-                              timeout=30)
-        if resp.status_code != 207:
-            return {} if with_meta else []
-        root = ET.fromstring(resp.content)
-        ns = {"d": "DAV:"}
-        prefix = "/wiki/"
-
-        if with_meta:
-            result = {}
-            for response in root.findall("d:response", ns):
-                href_elem = response.find("d:href", ns)
-                if href_elem is None:
-                    continue
-                href = (href_elem.text or "").rstrip("/")
-                if not href or href == prefix.rstrip("/"):
-                    continue
-                # Remove /wiki/ prefix
-                if href.startswith(prefix):
-                    rel = href[len(prefix):]
-                else:
-                    rel = href
-                if not rel:
-                    continue
-                # Extract metadata from propstat
-                etag = ""
-                last_modified = ""
-                size = 0
-                for propstat in response.findall("d:propstat/d:prop", ns):
-                    e = propstat.find("d:getetag", ns)
-                    if e is not None and e.text:
-                        etag = e.text.strip('"')
-                    lm = propstat.find("d:getlastmodified", ns)
-                    if lm is not None and lm.text:
-                        last_modified = lm.text
-                    s = propstat.find("d:getcontentlength", ns)
-                    if s is not None and s.text:
-                        try:
-                            size = int(s.text)
-                        except ValueError:
-                            pass
-                result[rel] = {
-                    "etag": etag,
-                    "last_modified": last_modified,
-                    "size": size,
-                }
-            return result
-        else:
-            files = []
-            for href_elem in root.findall(".//d:href", ns):
-                href = href_elem.text or ""
-                if href.startswith(prefix):
-                    href = href[len(prefix):]
-                if href and not href.endswith("/"):
-                    files.append(href)
-            return files
-    except Exception as e:
-        print(f"  WebDAV list error: {e}")
-        return {} if with_meta else []
-
-def webdav_delete(remote_rel: str) -> bool:
-    """Delete a file from NAS WebDAV."""
-    url = f"{WEBDAV_BASE}/{remote_rel}"
-    try:
-        resp = requests.delete(url, auth=(WEBDAV_USER, WEBDAV_PASS), timeout=30)
-        return resp.status_code in (200, 204)
-    except Exception:
-        return False
-
-# Type → Notion Database ID mapping
-# Set via environment variable or .env file
+# Directory name → Notion Database ID mapping
+# Each wiki subdirectory maps to a dedicated Notion database.
+# Set IDs via env vars or edit here directly.
 TYPE_TO_DB = {
     "entity": os.environ.get("NOTION_DB_ENTITY", ""),
     "concept": os.environ.get("NOTION_DB_CONCEPT", ""),
     "comparison": os.environ.get("NOTION_DB_COMPARISON", ""),
     "query": os.environ.get("NOTION_DB_QUERY", ""),
+    "tool": os.environ.get("NOTION_DB_TOOL", ""),
+    "project": os.environ.get("NOTION_DB_PROJECT", ""),
+    "person": os.environ.get("NOTION_DB_PERSON", ""),
+    "meeting": os.environ.get("NOTION_DB_MEETING", ""),
+    "idea": os.environ.get("NOTION_DB_IDEA", ""),
 }
 
-# Wiki dirs → type mapping
+# Wiki subdirectory → type name mapping (used for routing pages to databases)
 DIR_TO_TYPE = {
     "entities": "entity",
     "concepts": "concept",
     "comparisons": "comparison",
     "queries": "query",
+    "tools": "tool",
+    "projects": "project",
+    "people": "person",
+    "meetings": "meeting",
+    "ideas": "idea",
 }
+
+# System directories to skip during scanning
+EXCLUDE_DIRS = {"dream-reports", "raw", "src", "logs", "scripts", ".git",
+                "assets", "papers", "transcripts", "articles",
+                "images", "pdfs", "videos", "audio"}
+EXCLUDE_FILES = {"SCHEMA.md", "RESOLVER.md", "index.md", "log.md"}
 
 # --- Helpers ---
 
-# Shared session for connection pooling (avoids SSL handshake per request)
 _NOTION_SESSION = None
 
 def _get_session():
@@ -264,7 +129,7 @@ def notion_request(method, path, data=None, retries=5):
     for attempt in range(retries):
         try:
             resp = session.request(method, url, json=data, timeout=30)
-            if resp.status_code == 200 or resp.status_code == 201:
+            if resp.status_code in (200, 201):
                 return resp.json()
             if resp.status_code == 409:
                 time.sleep(1)
@@ -278,11 +143,10 @@ def notion_request(method, path, data=None, retries=5):
             return None
         except Exception as e:
             if attempt < retries - 1:
-                wait = min(2 ** attempt, 16)  # 1, 2, 4, 8, 16s exponential backoff
+                wait = min(2 ** attempt, 16)
                 print(f"  Request error (attempt {attempt+1}/{retries}): {e}")
                 print(f"  Retrying in {wait}s...")
                 time.sleep(wait)
-                # Close and recreate session on SSL errors to reset connection pool
                 if "SSL" in str(e) or "ssl" in str(e).lower():
                     session.close()
                     _NOTION_SESSION = None
@@ -304,6 +168,13 @@ def parse_frontmatter(content):
         fm = {}
     return fm, parts[2].strip()
 
+def file_hash(path: Path) -> str:
+    """Compute SHA-256 hex digest of a file."""
+    h = hashlib.sha256()
+    for chunk in path.open("rb"):
+        h.update(chunk)
+    return h.hexdigest()
+
 def parse_inline(text: str) -> list:
     """Convert a markdown line into Notion rich_text segments.
 
@@ -311,14 +182,6 @@ def parse_inline(text: str) -> list:
     Plain text between matches is also emitted as a segment.
     """
     segments = []
-
-    # Combined regex for all inline patterns.
-    # Order matters: links first (they contain brackets), then bold, italic, strikethrough, code.
-    # Group 1 = link text, Group 2 = link url  OR
-    # Group 3 = bold content  OR
-    # Group 4 = italic content  OR
-    # Group 5 = strikethrough content  OR
-    # Group 6 = inline code content
     pattern = re.compile(
         r'\[([^\]]+)\]\(([^)]+)\)'   # [text](url)
         r'|\*\*(.+?)\*\*'            # **bold**
@@ -329,61 +192,49 @@ def parse_inline(text: str) -> list:
 
     pos = 0
     for m in pattern.finditer(text):
-        # Emit any plain text before this match
         if m.start() > pos:
             plain = text[pos:m.start()]
             if plain:
                 segments.append({"type": "text", "text": {"content": plain}})
 
         if m.group(1) is not None:
-            # Link: [text](url)
             link_text = m.group(1)
             link_url = m.group(2)
-            # Recursively parse the link text for nested formatting
             inner = parse_inline(link_text)
             for seg in inner:
                 seg["href"] = link_url
             segments.extend(inner)
         elif m.group(3) is not None:
-            # Bold: **content**
             inner = parse_inline(m.group(3))
             for seg in inner:
                 seg.setdefault("annotations", {})["bold"] = True
             segments.extend(inner)
         elif m.group(4) is not None:
-            # Italic: *content*
             inner = parse_inline(m.group(4))
             for seg in inner:
                 seg.setdefault("annotations", {})["italic"] = True
             segments.extend(inner)
         elif m.group(5) is not None:
-            # Strikethrough: ~~content~~
             inner = parse_inline(m.group(5))
             for seg in inner:
                 seg.setdefault("annotations", {})["strikethrough"] = True
             segments.extend(inner)
         elif m.group(6) is not None:
-            # Inline code: `content`
             segments.append({
                 "type": "text",
                 "text": {"content": m.group(6)},
                 "annotations": {"code": True}
             })
-
         pos = m.end()
 
-    # Trailing plain text
     if pos < len(text):
         trailing = text[pos:]
         if trailing:
             segments.append({"type": "text", "text": {"content": trailing}})
 
-    # Ensure we always return at least one segment (empty text) so Notion doesn't choke
     if not segments:
         segments.append({"type": "text", "text": {"content": ""}})
 
-    # Notion rich_text items must have content <= 2000 chars each.
-    # If a single segment exceeds that, truncate it.
     for seg in segments:
         content = seg.get("text", {}).get("content", "")
         if len(content) > 2000:
@@ -393,13 +244,12 @@ def parse_inline(text: str) -> list:
 
 
 def _make_rich_text(text: str) -> list:
-    """Shorthand: parse inline markdown into Notion rich_text, joining to single segment if plain."""
-    # Pre-process [[wikilinks]] → **bold**
+    """Shorthand: parse inline markdown into Notion rich_text."""
     text = re.sub(r"\[\[(.+?)\]\]", r"**\1**", text)
     return parse_inline(text)
 
 def _is_para_line(s: str) -> bool:
-    """Return True if a stripped line is a continuation of a paragraph (not a block start)."""
+    """Return True if a stripped line is a continuation of a paragraph."""
     if not s:
         return False
     if s.startswith("#"):
@@ -420,6 +270,46 @@ def _is_para_line(s: str) -> bool:
         return False
     return True
 
+_NOTION_LANGUAGES = {
+    "abap", "arduino", "c", "clojure", "coffeescript", "c++", "c#", "css", "dart",
+    "docker", "elixir", "elm", "erlang", "flow", "fortran", "f#", "gherkin", "git",
+    "glsl", "go", "graphql", "groovy", "haskell", "html", "java", "javascript", "json",
+    "julia", "kotlin", "latex", "less", "lisp", "livescript", "lua", "makefile", "markdown",
+    "mathematica", "objective-c", "ocaml", "pascal", "perl", "php", "powershell", "python",
+    "r", "ruby", "rust", "sass", "scala", "scheme", "scss", "shell", "sql", "swift",
+    "text", "typescript", "vb.net", "verilog", "vhdl", "visual basic", "webassembly",
+    "xml", "yaml", "plain text",
+}
+
+# Common language aliases that Notion doesn't support directly
+_LANGUAGE_ALIASES = {
+    "sh": "shell", "bash": "shell", "zsh": "shell", "fish": "shell",
+    "js": "javascript", "jsx": "javascript", "tsx": "typescript", "ts": "typescript",
+    "py": "python", "rb": "ruby", "rs": "rust", "yml": "yaml",
+    "toml": "yaml", "ini": "plain text", "conf": "plain text", "cfg": "plain text",
+    "dockerfile": "docker", "diff": "plain text", "console": "plain text",
+    "typst": "plain text", "typ": "plain text",
+    "c++": "c++", "cpp": "c++", "cc": "c++",
+    "c#": "c#", "cs": "c#",
+    "f#": "f#", "fs": "f#",
+    "objc": "objective-c",
+    "make": "makefile",
+}
+
+def _normalize_code_language(lang: str) -> str:
+    """Normalize a code language identifier to one Notion supports."""
+    if not lang:
+        return "plain text"
+    lang_lower = lang.strip().lower()
+    # Check alias first
+    if lang_lower in _LANGUAGE_ALIASES:
+        return _LANGUAGE_ALIASES[lang_lower]
+    # Check direct match
+    if lang_lower in _NOTION_LANGUAGES:
+        return lang_lower
+    # Fallback
+    return "plain text"
+
 def markdown_to_notion_blocks(md_text):
     """Convert markdown text to Notion blocks (simplified)."""
     blocks = []
@@ -429,7 +319,6 @@ def markdown_to_notion_blocks(md_text):
     while i < len(lines):
         line = lines[i].strip()
 
-        # Skip empty lines
         if not line:
             i += 1
             continue
@@ -491,7 +380,7 @@ def markdown_to_notion_blocks(md_text):
                 "type": "code",
                 "code": {
                     "rich_text": [{"type": "text", "text": {"content": code_text[:2000]}}],
-                    "language": lang or "plain text"
+                    "language": _normalize_code_language(lang)
                 }
             })
             i += 1
@@ -514,7 +403,7 @@ def markdown_to_notion_blocks(md_text):
             i += 1
             continue
 
-        # Blockquote — merge consecutive > lines into a single quote block
+        # Blockquote
         if line.startswith(">"):
             quote_parts = [line[1:].strip()]
             i += 1
@@ -528,13 +417,12 @@ def markdown_to_notion_blocks(md_text):
             })
             continue
 
-        # Table (simple: first row is header, then separator, then data rows)
+        # Table
         if "|" in line and i + 1 < len(lines) and re.match(r"^\|[\s\-:|]+\|$", lines[i + 1].strip()):
             table_rows = []
-            # Parse the FIRST row as the header row
             header_cells = [c.strip() for c in line.split("|")[1:-1]]
             table_rows.append(header_cells)
-            i += 2  # skip header line + separator line
+            i += 2
             while i < len(lines) and "|" in lines[i]:
                 cells = [c.strip() for c in lines[i].split("|")[1:-1]]
                 table_rows.append(cells)
@@ -563,7 +451,7 @@ def markdown_to_notion_blocks(md_text):
                 })
             continue
 
-        # Regular paragraph — collect consecutive non-special lines
+        # Regular paragraph
         para_lines = [line]
         i += 1
         while i < len(lines) and _is_para_line(lines[i].strip()):
@@ -577,16 +465,18 @@ def markdown_to_notion_blocks(md_text):
             "paragraph": {"rich_text": _make_rich_text(para_text)}
         })
 
-    # Notion limits: max 100 blocks per append
     return blocks[:100]
 
-def get_existing_pages(db_id):
+def get_existing_pages(db_id, dedup=True):
     """Get all existing pages in a Notion database (paginated).
 
     Returns a dict keyed by Wiki File path, each value containing:
       page_id, name, wiki_file, content_hash (or empty string if unset).
+
+    When dedup=True, detects duplicate entries (same wiki_file) and
+    archives all but the most recently updated one.
     """
-    pages = {}
+    all_entries = []  # list of (wiki_file, page_info, last_edited_time)
     has_more = True
     cursor = None
     while has_more:
@@ -597,6 +487,8 @@ def get_existing_pages(db_id):
         if not result:
             break
         for page in result.get("results", []):
+            if page.get("archived", False):
+                continue
             name = ""
             title_prop = page.get("properties", {}).get("Name", {})
             if title_prop.get("title"):
@@ -605,20 +497,51 @@ def get_existing_pages(db_id):
             wf_prop = page.get("properties", {}).get("Wiki File", {})
             if wf_prop.get("rich_text"):
                 wiki_file = wf_prop["rich_text"][0]["plain_text"] if wf_prop["rich_text"] else ""
-            # Extract Content Hash property
             content_hash = ""
             ch_prop = page.get("properties", {}).get("Content Hash", {})
             if ch_prop.get("rich_text"):
                 content_hash = ch_prop["rich_text"][0]["plain_text"] if ch_prop["rich_text"] else ""
-            pages[wiki_file] = {
+            page_info = {
                 "page_id": page["id"],
                 "name": name,
                 "wiki_file": wiki_file,
                 "content_hash": content_hash,
             }
+            last_edited = page.get("last_edited_time", "")
+            all_entries.append((wiki_file, page_info, last_edited))
         has_more = result.get("has_more", False)
         cursor = result.get("next_cursor")
-        time.sleep(0.4)  # Rate limit
+        time.sleep(0.4)
+
+    # Dedup: keep the most recently edited entry per wiki_file, archive extras
+    pages = {}
+    if dedup:
+        from collections import defaultdict
+        groups = defaultdict(list)
+        for wiki_file, page_info, last_edited in all_entries:
+            groups[wiki_file].append((page_info, last_edited))
+
+        for wiki_file, entries in groups.items():
+            if len(entries) > 1:
+                # Sort by last_edited_time descending, keep newest
+                entries.sort(key=lambda x: x[1] or "", reverse=True)
+                keep = entries[0][0]
+                extras = entries[1:]
+                print(f"  ⚠ Dedup: {wiki_file} has {len(entries)} entries, archiving {len(extras)} duplicate(s)")
+                for extra_info, _ in extras:
+                    result = notion_request("PATCH", f"/pages/{extra_info['page_id']}", {"archived": True})
+                    if result is not None:
+                        print(f"    Archived duplicate: {extra_info['name']} ({extra_info['page_id'][:12]})")
+                    else:
+                        print(f"    Failed to archive: {extra_info['name']}")
+                    time.sleep(0.4)
+                pages[wiki_file] = keep
+            else:
+                pages[wiki_file] = entries[0][0]
+    else:
+        for wiki_file, page_info, _ in all_entries:
+            pages[wiki_file] = page_info
+
     return pages
 
 def sync_page(page_path, db_id, dry_run=False):
@@ -634,14 +557,12 @@ def sync_page(page_path, db_id, dry_run=False):
     sources = fm.get("sources", [])
     sources_str = ", ".join(sources) if isinstance(sources, list) else str(sources)
     wiki_file = str(page_path.relative_to(WIKI_DIR))
-
-    # Compute content hash for change detection
     content_hash = file_hash(page_path)
 
     if dry_run:
         print(f"  [DRY] Would create: {title} in {page_type} db")
-        print(f"         Tags: {tags}, Sources: {sources_str}")
-        print(f"         Content Hash: {content_hash[:16]}...")
+        print(f"         Wiki File: {wiki_file}")
+        print(f"         Tags: {tags}, Hash: {content_hash[:16]}...")
         return True
 
     # Build properties
@@ -658,19 +579,21 @@ def sync_page(page_path, db_id, dry_run=False):
         properties["Updated"] = {"date": {"start": str(updated)}}
     if sources_str:
         properties["Sources"] = {"rich_text": [{"type": "text", "text": {"content": sources_str[:2000]}}]}
-
-    # Entity-specific: Type property
-    if page_type and db_id == TYPE_TO_DB.get("entity"):
+    # Store the frontmatter type as a select property (only for databases that support it)
+    notion_type = ""
+    for t, db_id_t in TYPE_TO_DB.items():
+        if db_id == db_id_t:
+            notion_type = t
+            break
+    if page_type and notion_type in DBS_WITH_TYPE_PROP:
         properties["Type"] = {"select": {"name": page_type}}
 
-    # Convert body to blocks
     blocks = markdown_to_notion_blocks(body)
     if not blocks:
         blocks = [{"object": "block", "type": "paragraph", "paragraph": {
             "rich_text": [{"type": "text", "text": {"content": "(empty page)"}}]
         }}]
 
-    # Create page
     data = {
         "parent": {"database_id": db_id},
         "properties": properties,
@@ -683,8 +606,7 @@ def sync_page(page_path, db_id, dry_run=False):
         url = result.get("url", "")
         print(f"  Created: {title}")
         print(f"    Notion: {url}")
-        print(f"    Wiki file: {wiki_file}")
-        print(f"    Hash: {content_hash[:16]}...")
+        print(f"    Wiki File: {wiki_file}")
         return notion_id
     else:
         print(f"  Failed: {title}")
@@ -694,11 +616,10 @@ def update_page(page_path, notion_page_id, db_id, dry_run=False):
     """Update an existing Notion page with new wiki content.
 
     Uses a safe atomic approach:
-      1. Update page properties (including Content Hash)
-      2. Fetch existing block IDs
-      3. Append new blocks to the page
-      4. Only after successful append, delete old blocks
-    This ensures the page is never left empty if something fails.
+      1. Fetch existing block IDs
+      2. Append new blocks to the page
+      3. Only after successful append, delete old blocks
+      4. Update properties last
     """
     content = page_path.read_text(encoding="utf-8")
     fm, body = parse_frontmatter(content)
@@ -709,8 +630,6 @@ def update_page(page_path, notion_page_id, db_id, dry_run=False):
     sources = fm.get("sources", [])
     sources_str = ", ".join(sources) if isinstance(sources, list) else str(sources)
     page_type = fm.get("type", "")
-
-    # Compute content hash for change detection
     content_hash = file_hash(page_path)
 
     if dry_run:
@@ -718,18 +637,18 @@ def update_page(page_path, notion_page_id, db_id, dry_run=False):
         print(f"         New hash: {content_hash[:16]}...")
         return True
 
-    # Step 1: Fetch existing block IDs BEFORE appending new content
+    # Step 1: Fetch existing block IDs (skip archived blocks)
     existing = notion_request("GET", f"/blocks/{notion_page_id}/children?page_size=100")
     old_block_ids = []
     if existing and existing.get("results"):
-        old_block_ids = [block["id"] for block in existing["results"]]
+        old_block_ids = [block["id"] for block in existing["results"] if not block.get("archived", False)]
         while existing.get("has_more"):
             cursor = existing.get("next_cursor")
             existing = notion_request("GET", f"/blocks/{notion_page_id}/children?page_size=100&start_cursor={cursor}")
             if existing and existing.get("results"):
-                old_block_ids.extend(block["id"] for block in existing["results"])
+                old_block_ids.extend(block["id"] for block in existing["results"] if not block.get("archived", False))
 
-    # Step 2: Build and append new blocks FIRST (page keeps old content during this step)
+    # Step 2: Append new blocks FIRST
     blocks = markdown_to_notion_blocks(body)
     if blocks:
         try:
@@ -739,19 +658,17 @@ def update_page(page_path, notion_page_id, db_id, dry_run=False):
                 time.sleep(0.4)
         except Exception as e:
             print(f"  ✗ Failed to append new blocks for {title}: {e}")
-            print(f"    Old content preserved on page. Properties NOT updated — will retry next sync.")
             return False
 
     # Step 3: Delete old blocks AFTER new blocks are safely appended
     if old_block_ids:
-        failed_deletes = 0
         for bid in reversed(old_block_ids):
             result = notion_request("DELETE", f"/blocks/{bid}")
             if result is None:
-                failed_deletes += 1
-            time.sleep(0.35)  # Respect rate limits (3 req/s)
+                pass  # Already archived or other error — skip silently
+            time.sleep(0.35)
 
-    # Step 4: Update properties ONLY AFTER content is fully replaced
+    # Step 4: Update properties LAST
     properties = {
         "Name": {"title": [{"type": "text", "text": {"content": title[:100]}}]},
         "Tags": {"multi_select": [{"name": t} for t in tags]},
@@ -764,7 +681,12 @@ def update_page(page_path, notion_page_id, db_id, dry_run=False):
         properties["Updated"] = {"date": {"start": str(updated)}}
     if sources_str:
         properties["Sources"] = {"rich_text": [{"type": "text", "text": {"content": sources_str[:2000]}}]}
-    if page_type and db_id == TYPE_TO_DB.get("entity"):
+    notion_type = ""
+    for t, db_id_t in TYPE_TO_DB.items():
+        if db_id == db_id_t:
+            notion_type = t
+            break
+    if page_type and notion_type in DBS_WITH_TYPE_PROP:
         properties["Type"] = {"select": {"name": page_type}}
 
     notion_request("PATCH", f"/pages/{notion_page_id}", {"properties": properties})
@@ -774,22 +696,11 @@ def update_page(page_path, notion_page_id, db_id, dry_run=False):
     return True
 
 def archive_orphaned_pages(existing_pages, local_files, dry_run=False):
-    """Archive Notion pages whose Wiki File points to a deleted local file.
-
-    Args:
-        existing_pages: dict from get_existing_pages(), keyed by Wiki File path.
-                        This should be the *combined* dict across all databases
-                        that were synced in this run.
-        local_files: set of relative Wiki File paths that still exist locally.
-        dry_run: if True, only print what would be archived.
-
-    Returns:
-        Number of pages archived (or would-be archived).
-    """
+    """Archive Notion pages whose Wiki File points to a deleted local file."""
     archived = 0
     for wiki_file, page_info in existing_pages.items():
         if not wiki_file:
-            continue  # skip pages without a Wiki File property
+            continue
         if wiki_file not in local_files:
             page_id = page_info["page_id"]
             name = page_info.get("name", "(untitled)")
@@ -806,9 +717,15 @@ def archive_orphaned_pages(existing_pages, local_files, dry_run=False):
     return archived
 
 def collect_wiki_pages(wiki_type=None):
-    """Collect all wiki pages, optionally filtered by type."""
+    """Collect all wiki pages, optionally filtered by type (directory name).
+
+    Scans:
+      - All subdirectories in DIR_TO_TYPE (entities/, concepts/, tools/, etc.)
+      - Wiki root files with valid frontmatter (brain-upgrade-plan.md, etc.)
+    """
     pages = []
     dirs_to_scan = []
+
     if wiki_type:
         for d, t in DIR_TO_TYPE.items():
             if t == wiki_type:
@@ -816,46 +733,107 @@ def collect_wiki_pages(wiki_type=None):
     else:
         dirs_to_scan = list(DIR_TO_TYPE.keys())
 
+    # Scan subdirectories
     for d in dirs_to_scan:
         dir_path = WIKI_DIR / d
         if dir_path.exists():
             for f in sorted(dir_path.glob("*.md")):
                 pages.append((f, DIR_TO_TYPE[d]))
+
+    # Scan wiki root for pages with valid frontmatter type
+    if not wiki_type:
+        for f in sorted(WIKI_DIR.glob("*.md")):
+            if f.name in EXCLUDE_FILES:
+                continue
+            try:
+                content = f.read_text(encoding="utf-8")
+                fm, _ = parse_frontmatter(content)
+                page_type = fm.get("type", "")
+                if page_type:
+                    pages.append((f, page_type))
+            except Exception:
+                continue
+
     return pages
 
 def main():
-    parser = argparse.ArgumentParser(description="Sync LLM Wiki: Local <-> NAS <-> Notion")
+    parser = argparse.ArgumentParser(description="Sync LLM Wiki → Notion")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--all", action="store_true", help="Sync all pages to Notion")
-    group.add_argument("--type", choices=["entity", "concept", "comparison", "query"], help="Sync pages of type")
+    group.add_argument("--type", choices=list(DIR_TO_TYPE.values()),
+                       help="Sync pages of a specific type (entity/concept/tool/project/...)")
     group.add_argument("--file", help="Sync a single file")
     group.add_argument("--list", action="store_true", help="List sync status")
-    group.add_argument("--sync", action="store_true", help="Full sync: local -> Notion")
+    group.add_argument("--sync", action="store_true",
+                       help="Full sync: local wiki → Notion (implies --delete)")
     parser.add_argument("--dry-run", action="store_true", help="Preview without syncing")
     parser.add_argument("--force", action="store_true",
-                        help="Force re-sync all pages (ignore content hash, update properties). "
-                             "Use to fix missing tags/dates in Notion.")
+                        help="Force re-sync all pages (ignore content hash)")
     parser.add_argument("--delete", action="store_true",
-                        help="Archive Notion pages whose local wiki file has been deleted. "
-                             "Use with --all, --type, or --sync.")
+                        help="Archive Notion pages whose local wiki file has been deleted")
     args = parser.parse_args()
 
-    # --sync: Local -> Notion (full pipeline, no NAS)
+    # --sync implies --all and --delete
     if args.sync:
-        if not args.dry_run:
-            print("--- Syncing to Notion ---\n")
         args.all = True
+        args.delete = True
 
     if not NOTION_KEY and not args.list:
-        print("ERROR: NOTION_API_KEY not set. Add it to ~/.hermes/.env")
+        print("ERROR: NOTION_API_KEY not set. Add it to ~/.hermes/.env or wiki/.env")
         sys.exit(1)
 
+    # Validate database IDs for target types
+    target_types = set()
+    if args.sync or args.all:
+        target_types = set(DIR_TO_TYPE.values())
+        # Also include types found in wiki root pages
+        for f in sorted(WIKI_DIR.glob("*.md")):
+            if f.name in EXCLUDE_FILES:
+                continue
+            try:
+                content = f.read_text(encoding="utf-8")
+                fm, _ = parse_frontmatter(content)
+                pt = fm.get("type", "")
+                if pt:
+                    target_types.add(pt)
+            except Exception:
+                continue
+    elif args.type:
+        target_types = {args.type}
+    elif args.file:
+        fpath = Path(args.file).expanduser().resolve()
+        for d, t in DIR_TO_TYPE.items():
+            if d in str(fpath):
+                target_types.add(t)
+                break
+        if not target_types:
+            # Try to read frontmatter type for root files
+            try:
+                content = fpath.read_text(encoding="utf-8")
+                fm, _ = parse_frontmatter(content)
+                pt = fm.get("type", "")
+                if pt:
+                    target_types.add(pt)
+            except Exception:
+                pass
+
+    # Check for missing database IDs
+    missing_dbs = [t for t in target_types if not TYPE_TO_DB.get(t)]
+    if missing_dbs and not args.list:
+        print(f"ERROR: Missing Notion database IDs for types: {', '.join(missing_dbs)}")
+        print("Set them via environment variables (e.g., NOTION_DB_TOOL=xxx) or edit TYPE_TO_DB.")
+        sys.exit(1)
+
+    # --list: show sync status
     if args.list:
-        print("Wiki -> Notion sync status:\n")
+        print("Wiki → Notion sync status:\n")
         all_pages = collect_wiki_pages()
         existing_cache = {}
         for f, ptype in all_pages:
-            db_id = TYPE_TO_DB[ptype]
+            db_id = TYPE_TO_DB.get(ptype)
+            if not db_id:
+                print(f"  ⚠ {f.relative_to(WIKI_DIR)} -> NO DATABASE for type '{ptype}'")
+                continue
             if db_id not in existing_cache:
                 existing_cache[db_id] = get_existing_pages(db_id)
             existing = existing_cache[db_id]
@@ -870,23 +848,35 @@ def main():
         print(f"\nTotal wiki pages: {len(all_pages)}")
         return
 
+    # --file: sync a single file
     if args.file:
         fpath = Path(args.file).expanduser().resolve()
         if not fpath.exists():
             print(f"ERROR: File not found: {fpath}")
             sys.exit(1)
         ptype = None
+        # Check if file is in a known subdirectory
         for d, t in DIR_TO_TYPE.items():
             if d in str(fpath):
                 ptype = t
                 break
+        # If not in subdirectory, use frontmatter type
         if not ptype:
-            print(f"ERROR: Cannot determine page type from path: {fpath}")
+            try:
+                content = fpath.read_text(encoding="utf-8")
+                fm, _ = parse_frontmatter(content)
+                ptype = fm.get("type", "")
+            except Exception:
+                pass
+        if not ptype:
+            print(f"ERROR: Cannot determine page type for: {fpath}")
             sys.exit(1)
-        db_id = TYPE_TO_DB[ptype]
+        db_id = TYPE_TO_DB.get(ptype)
+        if not db_id:
+            print(f"ERROR: No Notion database configured for type '{ptype}'")
+            sys.exit(1)
         print(f"Syncing single file: {fpath.name} ({ptype})")
 
-        # Check existing pages to avoid duplicates
         existing = get_existing_pages(db_id)
         rel_path = str(fpath.relative_to(WIKI_DIR))
         local_hash = file_hash(fpath)
@@ -894,7 +884,7 @@ def main():
         if rel_path in existing:
             ep = existing[rel_path]
             notion_hash = ep.get("content_hash", "")
-            if local_hash == notion_hash:
+            if local_hash == notion_hash and not args.force:
                 print(f"  Skipped (up-to-date): {fpath.name}")
             else:
                 print(f"  Updating (hash changed): {fpath.name}")
@@ -903,40 +893,40 @@ def main():
             sync_page(fpath, db_id, dry_run=args.dry_run)
         return
 
-    # --all or --type: sync all pages of given type(s)
+    # --all or --sync or --type: sync all pages of given type(s)
     pages = collect_wiki_pages(wiki_type=args.type)
 
-    # Build existing_cache for sync AND delete (even if no local pages exist)
+    # Build existing_cache
     existing_cache = {}
-    if pages:
-        target_types = set(ptype for _, ptype in pages)
-    elif args.type:
-        target_types = {args.type}
-    else:
-        target_types = set(TYPE_TO_DB.keys())
     for t in target_types:
-        db_id = TYPE_TO_DB[t]
-        existing_cache[db_id] = get_existing_pages(db_id)
+        db_id = TYPE_TO_DB.get(t)
+        if db_id:
+            existing_cache[db_id] = get_existing_pages(db_id)
 
     if not pages and not args.delete:
         print("No wiki pages found.")
         return
 
-    print(f"Found {len(pages)} wiki page(s) to sync.\n")
+    if not args.dry_run:
+        print(f"Found {len(pages)} wiki page(s) to sync.\n")
 
     created = 0
     updated = 0
     skipped = 0
+    errors = 0
 
     for fpath, ptype in pages:
-        db_id = TYPE_TO_DB[ptype]
+        db_id = TYPE_TO_DB.get(ptype)
+        if not db_id:
+            print(f"  ⚠ SKIP {fpath.name} — no database for type '{ptype}'")
+            errors += 1
+            continue
+
         if db_id not in existing_cache:
             existing_cache[db_id] = get_existing_pages(db_id)
 
         rel_path = str(fpath.relative_to(WIKI_DIR))
         existing = existing_cache[db_id]
-
-        # Compute local content hash
         local_hash = file_hash(fpath)
 
         if rel_path in existing:
@@ -945,19 +935,26 @@ def main():
 
             if local_hash != notion_hash or args.force:
                 action = "FORCE" if args.force and local_hash == notion_hash else "UPDATE"
-                print(f"[{action}] {fpath.name} (hash changed)" if action == "UPDATE" else f"[{action}] {fpath.name} (re-syncing properties)")
-                update_page(fpath, ep["page_id"], db_id, dry_run=args.dry_run)
-                updated += 1
+                print(f"[{action}] {fpath.name}")
+                ok = update_page(fpath, ep["page_id"], db_id, dry_run=args.dry_run)
+                if ok or args.dry_run:
+                    updated += 1
+                else:
+                    errors += 1
             else:
                 skipped += 1
         else:
             print(f"[CREATE] {fpath.name}")
-            sync_page(fpath, db_id, dry_run=args.dry_run)
-            created += 1
+            ok = sync_page(fpath, db_id, dry_run=args.dry_run)
+            if ok or args.dry_run:
+                created += 1
+            else:
+                errors += 1
 
         time.sleep(0.4)
 
-    print(f"\nDone. Created: {created}, Updated: {updated}, Skipped (up-to-date): {skipped}")
+    print(f"\nDone. Created: {created}, Updated: {updated}, "
+          f"Skipped (up-to-date): {skipped}, Errors: {errors}")
 
     # --delete: archive orphaned Notion pages
     if args.delete:

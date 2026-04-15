@@ -169,10 +169,12 @@ def normalize_name(name: str) -> str:
 
 
 
-def _parse_tags(tag_str: str) -> list:
-    """解析tags字符串为列表"""
+def _parse_tags(tag_str) -> list:
+    """解析tags字符串或列表为列表。支持 str 和 list 输入。"""
     if not tag_str:
         return []
+    if isinstance(tag_str, list):
+        return [str(t).strip() for t in tag_str if str(t).strip()]
     # 移除 [] 并分割
     tag_str = tag_str.strip('[]')
     if not tag_str:
