@@ -45,7 +45,7 @@ When the upper conclusion contradicts the lower evidence, **Timeline takes prece
 
 **2. MCP Native — Zero Framework Lock-in**
 
-Wiki KB is a standard MCP Server. Any MCP-compatible agent (Claude Desktop, Cursor, Hermes, OpenHands, etc.) can directly call its 16 tools. No SDK, no adapters, no agent code changes needed.
+Wiki KB is a standard MCP Server. Any MCP-compatible agent (Claude Desktop, Cursor, Hermes, OpenHands, etc.) can directly call its 13 tools. No SDK, no adapters, no agent code changes needed.
 
 This means you can use Claude today, GPT tomorrow, an open-source model the day after — **your knowledge base stays, switching agents costs nothing**.
 
@@ -168,7 +168,7 @@ curl -s -X POST http://localhost:8764/mcp \
 ```
 wiki-kb/
 ├── scripts/                    # Core scripts (bind-mounted into container)
-│   ├── wiki_mcp_server.py      # MCP Server (16 tools)
+│   ├── wiki_mcp_server.py      # MCP Server (13 tools)
 │   ├── wiki_config.py          # Centralized config module
 │   ├── wiki_utils.py           # Shared utilities (frontmatter, relations)
 │   ├── entity_registry.py      # Entity registry (CLI + API)
@@ -212,7 +212,7 @@ wiki-kb/
 
 ## MCP Tools
 
-Wiki KB exposes 16 MCP tools:
+Wiki KB exposes 13 MCP tools:
 
 ### Wiki Operations (8)
 
@@ -227,7 +227,7 @@ Wiki KB exposes 16 MCP tools:
 | `wiki_health` | Health check (registry integrity, disk, OpenViking connectivity) |
 | `wiki_stats` | Statistics + OpenViking connection status |
 
-### Entity Registry (5)
+### Entity Registry (4)
 
 | Tool | Description |
 |------|-------------|

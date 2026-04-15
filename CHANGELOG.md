@@ -1,3 +1,22 @@
+
+## v1.2.0 (2026-04-15)
+
+### Security
+- **SEC-1**: Fixed YAML injection in `wiki_create` — name/status parameters now sanitized (newline stripped, length limited to 200 chars). Frontmatter generation switched from f-string to `yaml.dump` for safe serialization.
+
+### Features
+- **DOC-2**: `wiki_create` now defaults to `status="draft"`. New `wiki_review` tool submits draft pages for AI-assisted quality review (structural checks + optional LLM review via `REVIEW_API_KEY`). Pages promoted to `active` on pass, feedback returned on fail.
+- **DOC-3**: `wiki_search` OpenViking results now resolve `page_path` and `type` by matching local files.
+
+### Code Quality
+- **CLEAN-1**: Removed 3 unused imports (`uuid`, `Any`, `time as _time`).
+- Fixed legacy broken `OPENVIKING_API_KEY` line in source.
+
+### Tests
+- Added `test_wiki_create.py` (5 tests): YAML injection prevention, name length, default status.
+- Added `test_wiki_review.py` (3 tests): draft promotion, section validation, idempotent review.
+- Total: 35 tests passing.
+
 # Changelog
 
 All notable changes to the wiki-kb project will be documented in this file.

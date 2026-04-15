@@ -8,7 +8,6 @@ import json
 import os
 import sys
 import re
-import uuid
 import logging
 import signal
 import tempfile
@@ -32,7 +31,7 @@ if not _logger.handlers:
     _sh.setLevel(logging.WARNING)
     _sh.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
     _logger.addHandler(_sh)
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict
 
 # ============================================================
 # 1. 检查 mcp 包是否已安装
@@ -332,6 +331,20 @@ def _openviking_search(query: str, type_filter: str = "") -> List[Dict]:
                         "page_path": "",
                         "summary": r.get("abstract", ""),
                     })
+                # Resolve page_path from title by matching local files
+                slug = _slugify(title)
+                for _sdir in sorted(ALLOWED_SUBDIRS):
+                    candidate = WIKI_ROOT / _sdir / f"{slug}.md"
+                    if candidate.exists():
+                        try:
+                            _c = candidate.read_text(encoding="utf-8")
+                            _fm, _ = _get_frontmatter(_c)
+                            items[-1]["page_path"] = str(candidate.relative_to(WIKI_ROOT))
+                            items[-1]["type"] = _fm.get("type", "")
+                        except Exception:
+                            pass
+                        break
+
                 _logger.info("openviking_search: query=%r type=%r → %d results", query, type_filter, len(items))
                 return items
             else:
@@ -435,15 +448,20 @@ def wiki_get(page_id: str) -> Dict:
 
 
 @mcp.tool()
-def wiki_create(name: str, type: str, description: str, content: str = "", status: str = "active") -> Dict:
+def wiki_create(name: str, type: str, description: str, content: str = "", status: str = "draft") -> Dict:
     """
-    创建新 wiki 页面。
-    按 RESOLVER 路由到正确目录，自动生成 frontmatter + v3 schema。
-    自动注册到 Entity Registry。
-    返回 {page_path, entity_id}
+    Create a new wiki page with draft status.
+    Pages are created as "draft" -- call wiki_review() to promote to "active".
+    Auto-registers to Entity Registry. Returns {page_path, entity_id, status}.
     """
     # 验证 type
     type = _validate_type(type)
+    
+    # Input sanitization: prevent YAML injection via newlines
+    name = name.replace("\n", " ").replace("\r", " ").strip()
+    status = status.replace("\n", " ").replace("\r", " ").strip()
+    if len(name) > 200:
+        raise ValueError("Page name too long (max 200 characters)")
     
     # 内容长度限制 (1MB)
     if len(description) > 500_000 or len(content) > 1_000_000:
@@ -463,15 +481,21 @@ def wiki_create(name: str, type: str, description: str, content: str = "", statu
     now = datetime.now().strftime("%Y-%m-%d")
     default_content = content if content else description
 
-    # 构建 v3 schema 结构
+    # Build frontmatter safely with yaml.dump (prevents YAML injection)
+    import yaml
+    fm_dict = {
+        "title": name,
+        "created": now,
+        "updated": now,
+        "type": type,
+        "tags": [],
+        "sources": [],
+        "status": status,
+    }
+    fm_yaml = yaml.dump(fm_dict, default_flow_style=None, allow_unicode=True, sort_keys=False).rstrip("\n")
+
     page_content = f"""---
-title: {name}
-created: {now}
-updated: {now}
-type: {type}
-tags: []
-sources: []
-status: {status}
+{fm_yaml}
 ---
 
 # {name}
@@ -534,6 +558,7 @@ status: {status}
     return {
         "page_path": rel_path,
         "entity_id": entity_id,
+        "status": status,
         "title": name,
         "type": type
     }
@@ -932,10 +957,343 @@ def wiki_health() -> Dict:
 
 
 # ============================================================
+
+
+
+
+# ============================================================
+
+# 7. AI Review System
+
+# ============================================================
+
+
+
+def _review_page(page_path: Path) -> dict:
+
+    """Internal: review a draft page using structural + optional AI checks."""
+
+    content = page_path.read_text(encoding="utf-8")
+
+    fm, body = _get_frontmatter(content)
+
+    feedback = []
+
+    passed = True
+
+
+
+    if not body or not body.strip():
+
+        feedback.append("Page body is empty")
+
+        passed = False
+
+    else:
+
+        if "## Executive Summary" not in body:
+
+            feedback.append("Missing '## Executive Summary' section")
+
+            passed = False
+
+        else:
+
+            es_match = re.search(r"## Executive Summary\s*\n+(.*?)(?=\n## |\Z)", body, re.DOTALL)
+
+            if not es_match or not es_match.group(1).strip() or es_match.group(1).strip() == "-":
+
+                feedback.append("Executive Summary is empty or placeholder only")
+
+                passed = False
+
+
+
+        if "## Key Facts" not in body:
+
+            feedback.append("Missing '## Key Facts' section")
+
+            passed = False
+
+        elif not re.search(r"## Key Facts\s*\n+\s*-\s+\S", body):
+
+            feedback.append("Key Facts has no entries (only '-' placeholder)")
+
+            passed = False
+
+
+
+        if "## Relations" not in body:
+
+            feedback.append("Missing '## Relations' section")
+
+            passed = False
+
+
+
+        if "## Timeline" not in body:
+
+            feedback.append("Missing '## Timeline' section")
+
+            passed = False
+
+
+
+    # Optional AI review if REVIEW_API_KEY is configured
+
+    review_api_key = os.environ.get("REVIEW_API_KEY", "")
+
+    if review_api_key and passed:
+
+        try:
+
+            import urllib.request
+
+            review_api_url = os.environ.get(
+
+                "REVIEW_API_URL",
+
+                "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+
+            )
+
+            review_model = os.environ.get("REVIEW_MODEL", "glm-4-flash")
+
+            review_prompt = (
+
+                'You are a wiki page quality reviewer. Check if the page is substantive.\n'
+
+                'Respond in JSON only: {"passed": true/false, "feedback": ["suggestion1"]}\n\n'
+
+                f'Title: {fm.get("title", "N/A")}\n\n{body[:3000]}'
+
+            )
+
+            req = urllib.request.Request(
+
+                review_api_url,
+
+                data=json.dumps({
+
+                    "model": review_model,
+
+                    "messages": [{"role": "user", "content": review_prompt}],
+
+                    "temperature": 0.1,
+
+                    "max_tokens": 300,
+
+                }).encode("utf-8"),
+
+                headers={
+
+                    "Content-Type": "application/json",
+
+                    "Authorization": f"Bearer {review_api_key}",
+
+                },
+
+                method="POST",
+
+            )
+
+            with urllib.request.urlopen(req, timeout=15) as resp:
+
+                result = json.loads(resp.read().decode("utf-8"))
+
+                ai_content = result["choices"][0]["message"]["content"].strip()
+
+                ai_json = re.sub(r"^```(?:json)?\s*|```$", "", ai_content, flags=re.MULTILINE).strip()
+
+                ai_result = json.loads(ai_json)
+
+                if not ai_result.get("passed", True):
+
+                    passed = False
+
+                    feedback.extend(ai_result.get("feedback", []))
+
+        except Exception as e:
+
+            _logger.warning("AI review failed for %s: %s (using structural check only)", page_path.name, e)
+
+
+
+    return {"passed": passed, "feedback": feedback}
+
+
+
+
+
+@mcp.tool()
+
+def wiki_review(page_id: str) -> str:
+
+    """
+
+    Submit a draft wiki page for AI-assisted quality review.
+
+    If review passes, page status is promoted from 'draft' to 'active'.
+
+    If review fails, returns feedback for improvement -- fix issues and re-submit.
+
+    page_id can be filename (e.g. "hermes-agent") or full relative path.
+
+    Returns {status, passed, feedback}
+
+    """
+
+    page_path = _resolve_page(page_id)
+
+    if not page_path or not page_path.exists():
+
+        return json.dumps({"error": f"Page not found: {page_id}"})
+
+
+
+    content = page_path.read_text(encoding="utf-8")
+
+    fm, body = _get_frontmatter(content)
+
+    current_status = fm.get("status", "active")
+
+
+
+    if current_status != "draft":
+
+        return json.dumps({
+
+            "status": current_status, "passed": True, "feedback": [],
+
+            "message": f"Page is already '{current_status}', no review needed"
+
+        })
+
+
+
+    result = _review_page(page_path)
+
+
+
+    if result["passed"]:
+
+        _update_frontmatter_field(page_path, "status", "active")
+
+        _append_timeline_entry(page_path, "Page reviewed and promoted to active", "wiki_review")
+
+        return json.dumps({
+
+            "status": "active", "passed": True, "feedback": [],
+
+            "message": "Review passed -- page promoted to active"
+
+        })
+
+    else:
+
+        return json.dumps({
+
+            "status": "draft", "passed": False,
+
+            "feedback": result["feedback"],
+
+            "message": "Review failed -- fix the issues and call wiki_review() again"
+
+        })
+
+
+
+
+
+def _resolve_page(page_id: str):
+
+    """Resolve page_id to a validated Path. Supports filename or relative path."""
+
+    candidate = WIKI_ROOT / page_id
+
+    if candidate.exists():
+
+        return _validate_path(candidate)
+
+    if not page_id.endswith(".md"):
+
+        candidate = WIKI_ROOT / (page_id + ".md")
+
+        if candidate.exists():
+
+            return _validate_path(candidate)
+
+    for subdir in sorted(ALLOWED_SUBDIRS):
+
+        candidate = WIKI_ROOT / subdir / f"{page_id}.md"
+
+        if candidate.exists():
+
+            return _validate_path(candidate)
+
+    return None
+
+
+
+
+
+def _update_frontmatter_field(page_path: Path, field: str, value: str):
+
+    """Update a single frontmatter field atomically (inside lock)."""
+
+    with _FileLock(page_path):
+
+        content = page_path.read_text(encoding="utf-8")
+
+        fm, body = _get_frontmatter(content)
+
+        fm[field] = value
+
+        import yaml
+
+        fm_yaml = yaml.dump(fm, default_flow_style=None, allow_unicode=True, sort_keys=False).rstrip("\n")
+
+        new_content = f"---\n{fm_yaml}\n---\n{body}"
+
+        _safe_write(page_path, new_content)
+
+
+
+
+
+def _append_timeline_entry(page_path: Path, event: str, source: str = ""):
+
+    """Append a timeline entry to a wiki page atomically (inside lock)."""
+
+    with _FileLock(page_path):
+
+        content = page_path.read_text(encoding="utf-8")
+
+        fm, body = _get_frontmatter(content)
+
+        now = datetime.now().strftime("%Y-%m-%d")
+
+        entry = f"\n- **{now}** | {event}"
+
+        if source:
+
+            entry += f"\n  [Source: {source}]"
+
+        new_body = body.rstrip() + entry + "\n"
+
+        import yaml
+
+        fm_yaml = yaml.dump(fm, default_flow_style=None, allow_unicode=True, sort_keys=False).rstrip("\n")
+
+        new_content = f"---\n{fm_yaml}\n---\n{new_body}"
+
+        _safe_write(page_path, new_content)
+
+
+
 # Entry point
 # ============================================================
 if __name__ == "__main__":
-    import time as _time
     _mcp_port = os.environ.get("MCP_PORT", "8764")
     
     # Security warning if no auth configured
