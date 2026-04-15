@@ -199,12 +199,9 @@ done
 # Also check root files (only in full sync mode)
 if [[ "$MODE" == "sync" ]]; then
   for f in "${ROOT_FILES[@]}"; do
-    # Skip if file doesn't exist in container or clone
     if [[ ! -f "${CLONE_DIR}/$f" ]]; then
       continue
     fi
-    # For root files, check if they exist in the repo and compare
-    # (root files are typically edited locally, not in container)
   done
 fi
     
@@ -233,11 +230,11 @@ SCAN_DIR="${CLONE_DIR}"
 SENSITIVE_FOUND=0
     
 scan_pattern() {
-  local desc="$1" pattern="$2"
+  local desc="$1" pattern="$2" severity="${3:-CRITICAL}"
   local matches
-  matches=$(grep -rn "$pattern" "$SCAN_DIR/scripts/" "$SCAN_DIR/README.md" "$SCAN_DIR/README_zh.md" "$SCAN_DIR/CHANGELOG.md" "$SCAN_DIR/.env.example" 2>/dev/null || true)
+  matches=$(grep -rn -P "$pattern" "$SCAN_DIR/scripts/" "$SCAN_DIR/README.md" "$SCAN_DIR/README_zh.md" "$SCAN_DIR/CHANGELOG.md" "$SCAN_DIR/.env.example" 2>/dev/null || true)
   if [[ -n "$matches" ]]; then
-    log_err "${desc}: FOUND"
+    log_err "${desc}: FOUND [${severity}]"
     echo "$matches" | head -10
     SENSITIVE_FOUND=1
   else
@@ -245,11 +242,34 @@ scan_pattern() {
   fi
 }
     
-scan_pattern "Phone numbers (CN)"       '1[3-9][0-9]\{9\}'
-scan_pattern "Notion UUID"              '[0-9a-f]\{8\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{12\}'
-scan_pattern "Private IP"               '192\.168\|10\.\d\{1,3\}\.\d\{1,3\}\.\d\{1,3\}\|172\.\(1[6-9]\|2[0-9]\|3[01]\)\.'
+# === CRITICAL: must fix before push ===
+    
+scan_pattern "Phone numbers (CN)"       '1[3-9]\d{9}'
+scan_pattern "Notion UUID"              '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+scan_pattern "Private IP"               '192\.168\.|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.'
 scan_pattern "Hardcoded API key"        'api_key\s*=\s*['\''"][a-zA-Z0-9]'
 scan_pattern "Hardcoded password"       'password\s*=\s*['\''"]'
+scan_pattern "Hardcoded token"          'token\s*=\s*['\''"][a-zA-Z0-9]'
+scan_pattern "Hardcoded secret"         'secret\s*=\s*['\''"][a-zA-Z0-9]'
+scan_pattern "Bearer token"             'Bearer [a-zA-Z0-9_\-]{20,}'
+scan_pattern "GitHub token"             'gh[pousr]_[a-zA-Z0-9]{30,}'
+scan_pattern "Discord bot token"        '[MN][A-Za-z0-9]{23,}\.[A-Za-z0-9]{6}\.[A-Za-z0-9]{27,}'
+scan_pattern "Telegram bot token"       '\d{8,10}:[A-Za-z0-9_\-]{35,}'
+scan_pattern "Generic token/credential" 'eyJ[a-zA-Z0-9_-]{20,}\.eyJ[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{20,}'
+    
+# === WARNING: review before push (may be false positives) ===
+    
+# Chinese names (3+ consecutive CJK chars — may false-positive on common words)
+scan_pattern "Chinese names"            '[\x{4e00}-\x{9fff}]{3,}' 'WARNING'
+    
+# Company names (known patterns — extend this list as needed)
+scan_pattern "Known company names"      '腾讯|阿里巴巴|华为|字节跳动|百度|京东|美团|拼多多|小米|网易|蚂蚁|滴滴|快手|B站|bilibili|Tencent|Alibaba' 'WARNING'
+    
+# Chinese addresses (province/city/district keywords)
+scan_pattern "Chinese addresses"        '省|市|区|县|镇|村|路[0-9]|号[0-9]|弄|室|栋|楼层|座|院' 'WARNING'
+    
+# Email addresses (may contain personal info)
+scan_pattern "Email addresses"          '[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}' 'WARNING'
     
 if [[ $SENSITIVE_FOUND -eq 1 ]]; then
   echo ""
@@ -349,7 +369,7 @@ for f in "${SYNC_FILES[@]}"; do
   if [[ ! -f "${EXPORT_DIR}/$f" ]]; then
     continue
   fi
-if ! diff -q "${EXPORT_DIR}/$f" "${VERIFY_DIR}/scripts/$f" >/dev/null 2>&1; then
+  if ! diff -q "${EXPORT_DIR}/$f" "${VERIFY_DIR}/scripts/$f" >/dev/null 2>&1; then
     log_err "VERIFY FAILED: scripts/$f"
     VERIFY_FAIL=1
   fi
