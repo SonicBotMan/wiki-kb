@@ -5,6 +5,7 @@ Wiki Brain 共享工具函数。
 """
 
 import re
+import datetime
 import yaml
 
 
@@ -23,6 +24,10 @@ def get_frontmatter(content: str) -> tuple:
             fm = yaml.safe_load(fm_text) or {}
         except yaml.YAMLError:
             fm = {}
+        # Normalize datetime.date objects to YYYY-MM-DD strings
+        for k, v in fm.items():
+            if isinstance(v, datetime.date):
+                fm[k] = v.strftime("%Y-%m-%d")
         if not isinstance(fm, dict):
             fm = {}
         return fm, body

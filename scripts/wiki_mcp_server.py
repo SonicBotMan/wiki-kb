@@ -31,7 +31,7 @@ if not _logger.handlers:
     _sh = logging.StreamHandler(sys.stderr)
     _sh.setLevel(logging.WARNING)
     _sh.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
-_logger.addHandler(_sh)
+    _logger.addHandler(_sh)
 from typing import Optional, List, Dict, Any
 
 # ============================================================
@@ -41,9 +41,9 @@ try:
     from mcp.server.fastmcp import FastMCP
 except ImportError:
     print("=" * 60, file=sys.stderr)
-    print("错误: mcp 包未安装", file=sys.stderr)
+    print("ERROR: mcp package not installed", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
-    print("请运行以下命令安装:", file=sys.stderr)
+    print("Install with: pip install mcp", file=sys.stderr)
     print("  ~/.hermes/hermes-agent/venv/bin/pip install mcp", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
     sys.exit(1)
@@ -68,11 +68,11 @@ OPENVIKING_ACCOUNT = os.environ.get("OPENVIKING_ACCOUNT", "hermes")
 OPENVIKING_USER = os.environ.get("OPENVIKING_USER", "default")
 
 # ============================================================
-# 3. 导入 entity_registry 模块
-# ============================================================
 # 3. Import entity_registry module
 # ============================================================
 sys.path.insert(0, str(WIKI_ROOT / "scripts"))
+from wiki_utils import get_frontmatter as _get_frontmatter
+
 _REGISTRY_AVAILABLE = False
 _REGISTRY_IMPORT_ERROR = ""
 try:
@@ -120,17 +120,17 @@ def _validate_path(path: Path) -> Path:
         resolved = path.resolve()
         wiki_resolved = WIKI_ROOT.resolve()
         if not str(resolved).startswith(str(wiki_resolved) + os.sep) and resolved != wiki_resolved:
-            raise ValueError(f"路径越界: {path} 不在 WIKI_ROOT 内")
+            raise ValueError(f"Path traversal blocked: {path} is outside WIKI_ROOT")
         return resolved
     except (OSError, ValueError) as e:
-        raise ValueError(f"无效路径: {e}")
+        raise ValueError(f"Invalid path: {e}")
 
 
 def _validate_type(entity_type: str) -> str:
     """验证 entity/page 类型是否合法。"""
     normalized = entity_type.lower().strip()
     if normalized not in _ALLOWED_TYPES:
-        raise ValueError(f"无效类型: '{entity_type}'，允许: {_ALLOWED_TYPES}")
+        raise ValueError(f"Invalid type: '{entity_type}'. Allowed: {_ALLOWED_TYPES}")
     return normalized
 
 
@@ -225,21 +225,6 @@ def _resolve_page_path(page_id: str) -> Optional[Path]:
     return None
 
 
-def _get_frontmatter(content: str) -> tuple[dict, str]:
-    """提取 markdown 文件的 frontmatter"""
-    match = re.match(r'^---\n(.*?)\n---\n(.*)$', content, re.DOTALL)
-    if match:
-        fm_text = match.group(1)
-        body = match.group(2)
-        fm = {}
-        for line in fm_text.split('\n'):
-            m = re.match(r'^(\w+):\s*(.*)$', line)
-            if m:
-                key, val = m.group(1), m.group(2)
-                val = val.strip().strip("'\"")
-                fm[key] = val
-        return fm, body
-    return {}, content
 
 
 def _update_frontmatter(content: str, updates: dict) -> str:
@@ -432,7 +417,7 @@ def wiki_get(page_id: str) -> Dict:
     """
     path = _resolve_page_path(page_id)
     if not path:
-        raise ValueError(f"页面未找到: {page_id}")
+        raise ValueError(f"Page not found: {page_id}")
 
     content = path.read_text(encoding='utf-8')
     fm, body = _get_frontmatter(content)
@@ -469,7 +454,7 @@ def wiki_create(name: str, type: str, description: str, content: str = "", statu
     
     # 内容长度限制 (1MB)
     if len(description) > 500_000 or len(content) > 1_000_000:
-        raise ValueError("内容过长，description 最大 500KB，content 最大 1MB")
+        raise ValueError("Content too large: description max 500KB, content max 1MB")
     
     # 确定目录
     type_dir_map = {
@@ -489,7 +474,7 @@ def wiki_create(name: str, type: str, description: str, content: str = "", statu
     page_path = WIKI_ROOT / subdir / f"{slug}.md"
 
     if page_path.exists():
-        raise ValueError(f"页面已存在: {page_path}")
+        raise ValueError(f"Page already exists: {page_path}")
 
     # 生成 frontmatter
     now = datetime.now().strftime("%Y-%m-%d")
@@ -624,7 +609,7 @@ def wiki_append_timeline(page_id: str, event: str, source: str = "") -> Dict:
     """
     path = _resolve_page_path(page_id)
     if not path:
-        raise ValueError(f"页面未找到: {page_id}")
+        raise ValueError(f"Page not found: {page_id}")
 
     original = path.read_text(encoding='utf-8')
     fm, body = _get_frontmatter(original)
@@ -955,10 +940,10 @@ def _signal_handler(signum, frame):
     """处理 SIGTERM/SIGINT，确保 in-flight 写入完成。"""
     global _shutdown_requested
     if _shutdown_requested:
-        _logger.warning("收到重复关闭信号 (%s)，强制退出", signum)
+        _logger.warning("Duplicate shutdown signal (%s), forcing exit", signum)
         sys.exit(1)
     _shutdown_requested = True
-    _logger.info("收到信号 %s，优雅关闭中...", signum)
+    _logger.info("Received signal %s, shutting down gracefully...", signum)
     # FastMCP 的 uvicorn 会在下一次循环检测到 shutdown 标志后自动退出
     sys.exit(0)
 
@@ -980,6 +965,6 @@ if __name__ == "__main__":
             _mcp_port
         )
 
-    _logger.info("Wiki Brain MCP Server 启动 (WIKI_ROOT=%s, port=%s)", 
+    _logger.info("Wiki Brain MCP Server starting (WIKI_ROOT=%s, port=%s)", 
                 WIKI_ROOT, os.environ.get("MCP_PORT", "8764"))
     mcp.run(transport="streamable-http")
