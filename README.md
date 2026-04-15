@@ -1,158 +1,160 @@
 # Wiki Knowledge Base
 
-> **Agent 写、人读** — 一个让 AI Agent 自动维护结构化知识库的系统。
+[English](README.md) | [中文](README_zh.md)
 
-Wiki KB 是一个基于纯 Markdown 文件的结构化知识库，通过 [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) 暴露操作接口，让 AI Agent（如 Claude、GPT、GLM 等）能在对话中**主动读写**知识。
+> **Agent writes, human reads** — A structured knowledge base system that AI agents maintain autonomously.
 
-## 为什么是 Wiki KB？
+Wiki KB is a structured knowledge base built on pure Markdown files, exposing operations via [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) so that AI agents (Claude, GPT, GLM, etc.) can **actively read and write** knowledge during conversations.
 
-### 痛点
+## Why Wiki KB?
 
-现有的 AI 知识管理方案各有明显短板：
+### The Problem
 
-| 方案 | 问题 |
-|------|------|
-| **Notion / Confluence** | AI 只能"读"，不能"写"。知识维护成本全在人身上。数据锁定在私有平台。 |
-| **Obsidian / Logseq** | 人能编辑，但 AI 无法在对话中主动写入。需要额外插件/脚本桥接。 |
-| **RAG (向量数据库)** | 只有检索，没有知识沉淀。每次对话结束，知识就丢了。 |
-| **Dify / Coze / LangChain** | 绑定特定框架和 LLM。知识结构被工具的 data model 决定，不够灵活。 |
-| **让 AI 写 Notion/Obsidian** | 知识没有结构化规范，AI 写的内容质量参差不齐，缺乏矛盾检测和来源追溯。 |
+Existing AI knowledge management solutions all have significant limitations:
 
-### 核心理念
+| Approach | Problem |
+|----------|---------|
+| **Notion / Confluence** | AI can only "read", never "write". All knowledge maintenance falls on humans. Data locked in proprietary platforms. |
+| **Obsidian / Logseq** | Humans can edit, but AI cannot proactively write during conversations. Requires plugins/scripts to bridge. |
+| **RAG (Vector DBs)** | Retrieval only — no knowledge accumulation. Knowledge is lost when a conversation ends. |
+| **Dify / Coze / LangChain** | Tied to specific frameworks and LLMs. Knowledge structure dictated by tool's data model. |
+| **AI writing to Notion/Obsidian** | No structured schema for knowledge. AI-generated content quality is inconsistent. No contradiction detection or source tracing. |
 
-**Agent 写、人读。**
+### Core Philosophy
 
-大多数知识管理系统的设计假设**人**是知识的生产者，AI 是消费者。Wiki KB 反过来——**AI Agent 是知识的日常维护者**，人只需要在需要时审阅和编辑。
+**Agent writes, human reads.**
 
-这意味着：
-- 你在对话中提到一个新项目 → Agent 自动创建 wiki 页面
-- 你纠正了一个事实 → Agent 立刻更新页面 + 记录到 Timeline
-- 对话中产生了有价值的决策 → Agent 自动提取并归档
-- **你从不手动"记笔记"**，知识维护成本趋近于零
+Most knowledge management systems assume humans are knowledge producers and AI is a consumer. Wiki KB inverts this — **AI agents are the day-to-day maintainers**, and humans only review and edit when needed.
 
-### 独特设计
+This means:
+- You mention a new project in conversation → Agent automatically creates a wiki page
+- You correct a fact → Agent immediately updates the page + logs it in the Timeline
+- A valuable decision emerges from discussion → Agent extracts and archives it automatically
+- **You never manually "take notes"** — knowledge maintenance cost approaches zero
 
-**1. Compiled Truth + Timeline — 解决 AI 幻觉问题**
+### Unique Design
 
-传统知识库只存"当前结论"，AI 生成的内容无法追溯来源。Wiki KB 的每个页面分两层：
+**1. Compiled Truth + Timeline — Solving AI Hallucination**
 
-- **上层（Compiled Truth）**：当前最佳理解，AI 和人都可编辑，随时被重写
-- **下层（Timeline）**：append-only 证据线，每条信息标注来源和时间，永不修改
+Traditional knowledge bases only store "current conclusions" — AI-generated content has no traceable provenance. Every Wiki KB page has two layers:
 
-当上层结论和下层证据矛盾时，**以 Timeline 为准**。这从根本上解决了 AI 生成内容不可信的问题——不是靠"更好的 prompt"，而是靠结构约束。
+- **Upper layer (Compiled Truth)**: Current best understanding. Both AI and humans can edit; freely rewritten at any time.
+- **Lower layer (Timeline)**: Append-only evidence chain. Each entry is timestamped and sourced, never modified.
 
-**2. MCP 原生 — 不绑定任何 Agent 框架**
+When the upper conclusion contradicts the lower evidence, **Timeline takes precedence**. This fundamentally solves the trustworthiness problem of AI-generated content — not through "better prompts", but through structural constraints.
 
-Wiki KB 是一个标准 MCP Server。任何支持 MCP 的 Agent（Claude Desktop、Cursor、Hermes、OpenHands 等）都能直接调用它的 11 个 tools。不需要 SDK、不需要适配器、不需要改 Agent 代码。
+**2. MCP Native — Zero Framework Lock-in**
 
-这意味着你今天用 Claude，明天换 GPT，后天换开源模型——**知识库不变，换 Agent 零成本**。
+Wiki KB is a standard MCP Server. Any MCP-compatible agent (Claude Desktop, Cursor, Hermes, OpenHands, etc.) can directly call its 16 tools. No SDK, no adapters, no agent code changes needed.
 
-**3. 纯 Markdown + 文件系统 — 数据永远属于你**
+This means you can use Claude today, GPT tomorrow, an open-source model the day after — **your knowledge base stays, switching agents costs nothing**.
 
-所有知识就是 `.md` 文件。你可以：
-- 用任何编辑器直接编辑
-- 用 Git 做版本管理和协作
-- 用 rsync/SCP 在机器间同步
-- 离线阅读、备份、迁移
+**3. Pure Markdown + Filesystem — Your Data, Always**
 
-没有数据库、没有私有格式、没有平台锁定。哪怕 Wiki KB 项目停止维护，你的知识仍然完整可用。
+All knowledge lives as `.md` files. You can:
+- Edit with any text editor
+- Version control with Git
+- Sync across machines with rsync/SCP
+- Read, backup, and migrate offline
 
-**4. 自动化质量保证**
+No database, no proprietary format, no platform lock-in. Even if the Wiki KB project stops being maintained, your knowledge remains fully usable.
 
-知识由 AI 维护，但质量不能靠运气：
+**4. Automated Quality Assurance**
 
-- **Dream Cycle**：定期用 LLM 审计全部页面，检测矛盾、过时信息、知识缺口
-- **Entity Registry**：统一管理实体 ID 和别名，防止"同一个东西叫三个名字"
-- **Auto Index**：自动生成知识图谱，维护实体间的交叉引用
+Knowledge is maintained by AI, but quality isn't left to chance:
 
-**5. 渐进式复杂度**
+- **Dream Cycle**: Periodic LLM audit of all pages — detects contradictions, outdated info, and knowledge gaps
+- **Entity Registry**: Unified entity ID and alias management — prevents "the same thing going by three names"
+- **Auto Index**: Automatic knowledge graph generation, maintains cross-references between entities
 
-不需要一次性用全部功能：
+**5. Progressive Complexity**
 
-- **最小部署**：只要 Docker，不需要 OpenViking、不需要 LLM API Key，Wiki CRUD 和文件搜索就能工作
-- **加 OpenViking**：语义搜索能力，支持自然语言查询
-- **加 LLM API Key**：Dream Cycle 审计 + Memory Sync 自动化
+You don't need everything at once:
 
-每一步都是可选的，不会因为缺少某个组件就无法启动。
+- **Minimal deploy**: Just Docker — no OpenViking, no LLM API key needed. Wiki CRUD and file search work out of the box.
+- **+ OpenViking**: Semantic search with natural language queries
+- **+ LLM API Key**: Dream Cycle audit + Memory Sync automation
 
-### 与同类项目的对比
+Each step is optional. Nothing blocks you from starting.
 
-| 维度 | Wiki KB | Notion AI | Obsidian + AI | RAG 向量库 |
-|------|---------|-----------|---------------|-----------|
-| AI 能否主动写入 | ✅ 核心功能 | ❌ 只能读 | ⚠️ 需插件 | ❌ 只能检索 |
-| 知识结构规范 | ✅ Schema v3 | ✅ Database Schema | ❌ 自由格式 | ❌ 无结构 |
-| 来源追溯 | ✅ Timeline | ❌ | ⚠️ 部分插件 | ❌ |
-| 数据自主性 | ✅ 纯 Markdown | ❌ 平台锁定 | ✅ 纯 Markdown | ⚠️ 取决于实现 |
-| Agent 框架绑定 | ❌ MCP 标准 | ✅ 绑定 Notion | ✅ 绑定 Obsidian | ✅ 绑定框架 |
-| 自动质量审计 | ✅ Dream Cycle | ❌ | ❌ | ❌ |
-| 离线可用 | ✅ 纯文件 | ❌ | ✅ | ⚠️ 取决于向量库 |
-| 多 Agent 兼容 | ✅ 任何 MCP 客户端 | ❌ | ❌ | ⚠️ 取决于框架 |
+### Comparison with Alternatives
 
-## ✨ 特性
+| Dimension | Wiki KB | Notion AI | Obsidian + AI | RAG Vector DB |
+|-----------|---------|-----------|---------------|---------------|
+| AI can proactively write | ✅ Core feature | ❌ Read only | ⚠️ Plugins needed | ❌ Retrieval only |
+| Structured knowledge schema | ✅ Schema v3 | ✅ DB Schema | ❌ Freeform | ❌ Unstructured |
+| Source tracing | ✅ Timeline | ❌ | ⚠️ Some plugins | ❌ |
+| Data sovereignty | ✅ Pure Markdown | ❌ Platform lock-in | ✅ Pure Markdown | ⚠️ Implementation-dependent |
+| Agent framework lock-in | ❌ MCP standard | ✅ Locked to Notion | ✅ Locked to Obsidian | ✅ Locked to framework |
+| Automated quality audit | ✅ Dream Cycle | ❌ | ❌ | ❌ |
+| Offline capable | ✅ Pure files | ❌ | ✅ | ⚠️ Depends on vector DB |
+| Multi-agent compatible | ✅ Any MCP client | ❌ | ❌ | ⚠️ Framework-dependent |
 
-- 📝 **结构化 Schema** — "Compiled Truth + Timeline" 双层模式：上层可重写、下层只追加
-- 🔌 **MCP Server** — 标准 MCP 协议，任何支持 MCP 的 Agent 都能直接调用
-- 🔍 **语义搜索** — 可选集成 [OpenViking](https://github.com/openviking/openviking) 做向量检索
-- 🧠 **实体注册** — 内置 Entity Registry，支持别名解析、模糊匹配、去重
-- 🤖 **自动化 Pipeline** — Dream Cycle（LLM 审计）、Auto Index（知识图谱生成）、Memory Sync（对话→Wiki）
-- 🐳 **Docker 部署** — 单容器部署，资源占用低（512MB / 0.5 CPU）
-- 📂 **纯文件存储** — 所有数据就是 Markdown 文件，可用任何编辑器直接编辑，支持 Git 版本管理
+## ✨ Features
 
-## 架构概览
+- 📝 **Structured Schema** — "Compiled Truth + Timeline" dual-layer model: upper layer is rewritable, lower layer is append-only
+- 🔌 **MCP Server** — Standard MCP protocol, any MCP-compatible agent can call directly
+- 🔍 **Semantic Search** — Optional [OpenViking](https://github.com/openviking/openviking) integration for vector retrieval
+- 🧠 **Entity Registry** — Built-in entity management with alias resolution, fuzzy matching, and deduplication
+- 🤖 **Automation Pipeline** — Dream Cycle (LLM audit), Auto Index (knowledge graph), Memory Sync (conversation → Wiki)
+- 🐳 **Docker Deployment** — Single container, low resource usage (512MB / 0.5 CPU)
+- 📂 **Pure File Storage** — All data is Markdown files, editable with any editor, Git-friendly
 
-### 在 Agent 记忆系统中的位置
+## Architecture Overview
 
-Wiki-KB 是 Agent 记忆系统中的**结构化长期记忆层**，与 Persistent Memory、OpenViking、Skills 协同工作：
+### Position in Agent Memory Systems
+
+Wiki-KB is the **structured long-term memory layer** in an agent memory system, working alongside Persistent Memory, OpenViking, and Skills:
 
 ![Memory System Landscape](docs/images/memory-system-landscape.png)
 
-**数据流转**：
-1. 对话中产生知识 → Agent 通过 MCP 调用 `wiki_create` / `wiki_update` 写入 Wiki
-2. Cron 定时 → `memory_to_wiki.py` 从 OpenViking 提取记忆回写 Wiki
-3. Cron 定时 → `dream_cycle.py` 用 LLM 审计 Wiki 质量
-4. `auto_index.py` → 将 Wiki 页面同步到 OpenViking（语义搜索）
-5. 人类随时 → 直接编辑 `.md` 文件
+**Data flow**:
+1. Knowledge emerges in conversation → Agent calls `wiki_create` / `wiki_update` via MCP
+2. Cron → `memory_to_wiki.py` extracts memories from OpenViking back to Wiki
+3. Cron → `dream_cycle.py` runs LLM audit on Wiki quality
+4. `auto_index.py` → syncs Wiki pages to OpenViking (semantic search)
+5. Human → directly edits `.md` files at any time
 
-### 项目内部架构
+### Internal Architecture
 
 ![Wiki-KB Internal Architecture](docs/images/wiki-kb-internal-architecture.png)
 
-## 快速开始
+## Quick Start
 
-### 前提条件
+### Prerequisites
 
 - Docker & Docker Compose
-- Python 3.11+（如需本地运行脚本）
+- Python 3.11+ (for running scripts locally)
 
-### 1. 克隆并配置
+### 1. Clone & Configure
 
 ```bash
-git clone https://github.com/yourname/wiki-kb.git
+git clone https://github.com/SonicBotMan/wiki-kb.git
 cd wiki-kb
 
-# 创建环境配置
+# Create environment config
 cp .env.example .env
-# 编辑 .env 填入你的配置（见下方环境变量说明）
+# Edit .env with your settings (see Environment Variables below)
 ```
 
-### 2. 创建 Wiki 目录结构
+### 2. Create Wiki Directory Structure
 
 ```bash
-mkdir -p wiki/{concepts,entities,people,projects,meetings,ideas,comparisons,queries}
+mkdir -p wiki/{concepts,entities,people,projects,meetings,ideas,comparisons,queries,tools}
 mkdir -p wiki/{logs/dream-reports,src/{articles,audio,images,pdfs,videos}}
 mkdir -p scripts
 ```
 
-### 3. Docker 部署
+### 3. Docker Deployment
 
 ```bash
 docker compose up -d --build
 
-# 等待健康检查通过（约 30 秒）
+# Wait for health check (≈30s)
 docker ps --filter name=wiki-brain --format "{{.Status}}"
 ```
 
-### 4. 验证 MCP 端点
+### 4. Verify MCP Endpoint
 
 ```bash
 curl -s -X POST http://localhost:8764/mcp \
@@ -161,80 +163,87 @@ curl -s -X POST http://localhost:8764/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 ```
 
-## 目录结构
+## Directory Structure
 
 ```
 wiki-kb/
-├── scripts/                    # 核心脚本（bind mount 到容器）
-│   ├── wiki_mcp_server.py      # MCP Server 主程序（11 个 tools）
-│   ├── wiki_config.py          # 集中配置模块（dataclass + 环境变量层级）
-│   ├── entity_registry.py      # 实体注册表（CLI + API）
-│   ├── auto_index.py           # 自动索引 + OpenViking 同步
-│   ├── dream_cycle.py          # LLM 知识审计
-│   ├── memory_to_wiki.py       # 对话记忆 → Wiki 同步
-│   ├── wiki-to-notion.py       # Wiki ↔ NAS (WebDAV) ↔ Notion 同步
-│   ├── migrate_wiki_schema.py  # v2 → v3 Schema 迁移工具
-│   └── wiki-backup.sh          # 备份脚本
-├── wiki/                       # 知识库数据（bind mount 到容器）
-│   ├── concepts/               # 心智模型、框架、技术概念
-│   ├── entities/               # 产品、组织、公司、平台
-│   ├── people/                 # 人物
-│   ├── projects/               # 项目
-│   ├── meetings/               # 会议记录
-│   ├── ideas/                  # 创意、想法
-│   ├── comparisons/            # 对比分析
-│   ├── queries/                # 查询记录
-│   ├── src/                    # 原始素材（不参与索引）
-│   │   ├── articles/           # 文章存档
-│   │   ├── images/             # 图片
-│   │   ├── pdfs/               # PDF 文档
-│   │   ├── audio/              # 音频
-│   │   └── videos/             # 视频
-│   ├── logs/                   # 日志和审计报告
-│   ├── SCHEMA.md               # 页面结构规范
-│   ├── RESOLVER.md             # 分类路由规则
-│   ├── graph.json              # 知识图谱
-│   ├── registry.json           # 实体注册表
-│   └── index.md                # 内容目录
+├── scripts/                    # Core scripts (bind-mounted into container)
+│   ├── wiki_mcp_server.py      # MCP Server (16 tools)
+│   ├── wiki_config.py          # Centralized config module
+│   ├── wiki_utils.py           # Shared utilities (frontmatter, relations)
+│   ├── entity_registry.py      # Entity registry (CLI + API)
+│   ├── auto_index.py           # Auto index + OpenViking sync
+│   ├── dream_cycle.py          # LLM knowledge audit
+│   ├── memory_to_wiki.py       # Conversation memory → Wiki sync
+│   ├── wiki-to-notion.py       # Wiki → Notion sync
+│   ├── migrate_wiki_schema.py  # v2 → v3 schema migration
+│   └── wiki-backup.sh          # Backup script
+├── wiki/                       # Knowledge base data (bind-mounted into container)
+│   ├── concepts/               # Mental models, frameworks, technical concepts
+│   ├── entities/               # Products, organizations, companies, platforms
+│   ├── people/                 # People
+│   ├── projects/               # Projects
+│   ├── meetings/               # Meeting notes, decision records
+│   ├── ideas/                  # Ideas, inspirations, directions to explore
+│   ├── comparisons/            # Comparative analyses
+│   ├── queries/                # Query records
+│   ├── tools/                  # Tools and utilities
+│   ├── src/                    # Raw materials (excluded from indexing)
+│   │   ├── articles/           # Article archives
+│   │   ├── images/             # Images
+│   │   ├── pdfs/               # PDF documents
+│   │   ├── audio/              # Audio files
+│   │   └── videos/             # Videos
+│   ├── logs/                   # Logs and audit reports
+│   ├── SCHEMA.md               # Page structure specification
+│   ├── RESOLVER.md             # Category routing rules
+│   ├── graph.json              # Knowledge graph
+│   ├── registry.json           # Entity registry
+│   └── index.md                # Table of contents
 ├── Dockerfile
 ├── docker-compose.yml
+├── docker-compose.production.yml
 ├── .env.example
+├── requirements.txt
+├── CHANGELOG.md
 └── README.md
 ```
 
 ## MCP Tools
 
-Wiki KB 暴露 11 个 MCP tools：
+Wiki KB exposes 16 MCP tools:
 
-### Wiki 操作（6 个）
+### Wiki Operations (8)
 
-| Tool | 说明 |
-|------|------|
-| `wiki_search` | 语义搜索 wiki 页面（支持 type 过滤） |
-| `wiki_get` | 读取页面完整内容（返回结构化 sections） |
-| `wiki_create` | 创建新页面（自动路由目录 + 注册实体） |
-| `wiki_update` | 更新指定 section（executive_summary / key_facts / relations） |
-| `wiki_append_timeline` | 追加 Timeline 条目（自动格式化 + 更新日期） |
-| `wiki_list` | 列出页面（支持 type / status 过滤） |
+| Tool | Description |
+|------|-------------|
+| `wiki_search` | Semantic search across wiki pages (supports type filtering) |
+| `wiki_get` | Read full page content (returns structured sections) |
+| `wiki_create` | Create new page (auto-routes directory + registers entity) |
+| `wiki_update` | Update specific section (executive_summary / key_facts / relations) |
+| `wiki_append_timeline` | Append Timeline entry (auto-formatted + date updated) |
+| `wiki_list` | List pages (supports type / status filtering) |
+| `wiki_health` | Health check (registry integrity, disk, OpenViking connectivity) |
+| `wiki_stats` | Statistics + OpenViking connection status |
 
-### Entity Registry（4 个）
+### Entity Registry (5)
 
-| Tool | 说明 |
-|------|------|
-| `entity_resolve` | 通过名称/别名解析实体 |
-| `entity_register` | 注册新实体 |
-| `entity_list` | 列出实体（支持 type 过滤） |
-| `entity_merge` | 合并两个实体 |
+| Tool | Description |
+|------|-------------|
+| `entity_resolve` | Resolve entity by name or alias |
+| `entity_register` | Register new entity |
+| `entity_list` | List entities (supports type filtering) |
+| `entity_merge` | Merge two entities |
 
-### 系统（1 个）
+### System (1)
 
-| Tool | 说明 |
-|------|------|
-| `wiki_stats` | 返回统计信息 + OpenViking 连通状态 |
+| Tool | Description |
+|------|-------------|
+| `wiki_stats` | Returns statistics + OpenViking connectivity status |
 
-### 在 Agent 中使用
+### Usage in Agents
 
-在 MCP 客户端配置中添加：
+Add to your MCP client configuration:
 
 ```json
 {
@@ -269,13 +278,13 @@ Wiki KB 暴露 11 个 MCP tools：
 }
 ```
 
-## 页面格式（SCHEMA v3）
+## Page Format (SCHEMA v3)
 
-每个 wiki 页面遵循 **Compiled Truth + Timeline** 模式：
+Every wiki page follows the **Compiled Truth + Timeline** pattern:
 
 ```markdown
 ---
-title: 实体名
+title: Entity Name
 created: 2026-01-15
 updated: 2026-04-13
 type: entity
@@ -284,182 +293,175 @@ sources: [src/articles/xxx.md]
 status: active
 ---
 
-# 实体名
+# Entity Name
 
 ## Executive Summary
-当前最佳理解。新信息到来时整体重写，不是追加。
+Current best understanding. Rewritten as a whole when new information arrives — never appended.
 
 ## Key Facts
-- 事实1（结构化，可被 agent 直接引用）
-- 事实2
+- Fact 1 (structured, directly referenceable by agents)
+- Fact 2
 
 ## Relations
-| 关系 | 目标 | 说明 |
-|------|------|------|
-| uses | [[openviking]] | 语义搜索后端 |
-| related | [[hermes-agent]] | 集成 |
+| Relation | Target | Description |
+|----------|--------|-------------|
+| uses | [[openviking]] | Semantic search backend |
+| related | [[hermes-agent]] | Integration |
 
 ---
 
 ## Timeline
 
-- **2026-01-15** | 页面创建
+- **2026-01-15** | Page created
   [Source: wiki_mcp_server]
-- **2026-03-20** | 新版本发布
-  [Source: 官方博客, 2026-03-20]
+- **2026-03-20** | New version released
+  [Source: Official blog, 2026-03-20]
 ```
 
-### 核心规则
+### Core Rules
 
-| 区域 | 操作 | 说明 |
-|------|------|------|
-| Frontmatter | **REWRITE** | 结构化元数据 |
-| Executive Summary | **REWRITE** | 当前最佳理解，整体重写 |
-| Key Facts | **REWRITE** | 结构化事实列表 |
-| Relations | **REWRITE** | 关系表 |
-| `---` (分隔线) | **固定** | 不可删除 |
-| Timeline | **APPEND-ONLY** | 严格只追加，永远不修改 |
+| Zone | Operation | Description |
+|------|-----------|-------------|
+| Frontmatter | **REWRITE** | Structured metadata |
+| Executive Summary | **REWRITE** | Current best understanding, rewritten as a whole |
+| Key Facts | **REWRITE** | Structured fact list |
+| Relations | **REWRITE** | Relationship table |
+| `---` (separator) | **FIXED** | Must not be removed |
+| Timeline | **APPEND-ONLY** | Strictly append-only, never modify |
 
-### 页面类型
+### Page Types
 
-| type | 目录 | 说明 |
-|------|------|------|
-| `person` | `people/` | 人物 |
-| `project` | `projects/` | 项目（有明确目标和时间线） |
-| `entity` | `entities/` | 产品/组织/公司/平台 |
-| `concept` | `concepts/` | 心智模型/框架/技术概念 |
-| `meeting` | `meetings/` | 会议记录/决策记录 |
-| `idea` | `ideas/` | 创意/想法/待探索方向 |
-| `comparison` | `comparisons/` | 对比分析 |
-| `query` | `queries/` | 查询记录 |
+| type | Directory | Description |
+|------|-----------|-------------|
+| `person` | `people/` | People |
+| `project` | `projects/` | Projects (with clear goals and timelines) |
+| `entity` | `entities/` | Products / organizations / companies / platforms |
+| `concept` | `concepts/` | Mental models / frameworks / technical concepts |
+| `meeting` | `meetings/` | Meeting notes / decision records |
+| `idea` | `ideas/` | Ideas / inspirations / directions to explore |
+| `comparison` | `comparisons/` | Comparative analyses |
+| `query` | `queries/` | Query records |
+| `tool` | `tools/` | Tools and utilities |
 
-### 关系类型
+### Relation Types
 
-| 关系 | 含义 |
-|------|------|
-| `uses` | 使用/依赖 |
-| `part-of` | 属于/子集 |
-| `related` | 相关 |
-| `contrasts` | 对比/竞争 |
-| `implements` | 实现/落地 |
-| `created-by` | 创建者 |
-| `evolved-from` | 演化自 |
+| Relation | Meaning |
+|----------|---------|
+| `uses` | Uses / depends on |
+| `part-of` | Belongs to / subset of |
+| `related` | Related to |
+| `contrasts` | Contrasts / competes with |
+| `implements` | Implements / deploys |
+| `created-by` | Created by |
+| `evolved-from` | Evolved from |
 
-### 状态生命周期
+### Status Lifecycle
 
 `draft` → `active` → `archived`
 
-- Agent 自动创建的页面标记为 `draft`
-- Dream Cycle 审核后提升为 `active`
-- 内容被完全替代时归档
+- Pages auto-created by agents are marked `draft`
+- Dream Cycle promotes them to `active` after review
+- Pages are archived when content is fully superseded
 
-## 自动化 Pipeline
+## Automation Pipeline
 
-### Dream Cycle — LLM 知识审计
+### Dream Cycle — LLM Knowledge Audit
 
-定期用 LLM 审计知识库质量，检测：
-- **矛盾** — 跨页面信息冲突
-- **过时** — 信息已不再准确
-- **缺口** — 缺失重要知识
-- **关系问题** — 实体关系不一致
+Periodically audits knowledge base quality using LLM, detecting:
+- **Contradictions** — Cross-page information conflicts
+- **Outdated info** — Information no longer accurate
+- **Gaps** — Missing important knowledge
+- **Relation issues** — Inconsistent entity relationships
 
 ```bash
-# 手动运行审计（dry-run）
+# Manual audit (dry-run)
 docker exec wiki-brain python3 /app/scripts/dream_cycle.py
 
-# 应用审计建议
+# Apply audit suggestions
 docker exec wiki-brain python3 /app/scripts/dream_cycle.py --apply
 ```
 
-### Auto Index — 知识图谱生成
+### Auto Index — Knowledge Graph Generation
 
-检测文件变更，自动生成 `graph.json`（节点 + 边），可选同步到 OpenViking。
+Detects file changes, auto-generates `graph.json` (nodes + edges), optionally syncs to OpenViking.
 
 ```bash
 docker exec wiki-brain python3 /app/scripts/auto_index.py
 ```
 
-### Memory to Wiki — 对话记忆同步
+### Memory to Wiki — Conversation Memory Sync
 
-从 OpenViking memories 提取实体和事件，写回 Wiki 页面。
+Extracts entities and events from OpenViking memories, writes them back to Wiki pages.
 
 ```bash
 docker exec wiki-brain python3 /app/scripts/memory_to_wiki.py
 ```
 
-### Cron 定时任务
+### Cron Schedule
 
 ```bash
-# 每日 03:00 — 对话记忆同步
+# Daily 03:00 — Conversation memory sync
 0 3 * * * docker exec wiki-brain python3 /app/scripts/memory_to_wiki.py >> /path/to/wiki/logs/cron.log 2>&1
 
-# 每日 03:10 — Dream Cycle 审计
+# Daily 03:10 — Dream Cycle audit
 10 3 * * * docker exec wiki-brain python3 /app/scripts/dream_cycle.py --apply >> /path/to/wiki/logs/cron.log 2>&1
 
-# 每日 03:30 — 自动索引 + OpenViking 同步
+# Daily 03:30 — Auto index + OpenViking sync
 30 3 * * * docker exec wiki-brain python3 /app/scripts/auto_index.py --sync >> /path/to/wiki/logs/cron.log 2>&1
 
-# 每日 04:00 — 备份
+# Daily 04:00 — Backup
 0 4 * * * /path/to/wiki-kb/scripts/wiki-backup.sh >> /path/to/wiki/logs/backup.log 2>&1
 ```
 
-## 环境变量
+## Environment Variables
 
-| 变量 | 必需 | 默认值 | 说明 |
-|------|------|--------|------|
-| `WIKI_ROOT` | 否 | `/data` | Wiki 数据根目录（容器内） |
-| `MCP_PORT` | 否 | `8764` | MCP Server 端口 |
-| `OPENVIKING_ENDPOINT` | 否 | `http://localhost:1933` | OpenViking 完整 URL |
-| `OPENVIKING_API_KEY` | 否 | — | OpenViking API Key（不设置则跳过 OV 集成） |
-| `OPENVIKING_ACCOUNT` | 否 | `hermes` | OpenViking 账户名 |
-| `OPENVIKING_USER` | 否 | `default` | OpenViking 用户名 |
-| `MCP_API_KEY` | 否 | — | MCP API Key（不设置则跳过认证） |
-| `GLM_API_KEY` | Dream Cycle | — | LLM API Key（Dream Cycle / Memory Sync 用） |
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `WIKI_ROOT` | No | `/data` | Wiki data root directory (inside container) |
+| `MCP_PORT` | No | `8764` | MCP Server port |
+| `OPENVIKING_ENDPOINT` | No | `http://localhost:1933` | OpenViking full URL |
+| `OPENVIKING_API_KEY` | No | — | OpenViking API Key (skip OV integration if unset) |
+| `OPENVIKING_ACCOUNT` | No | `hermes` | OpenViking account name |
+| `OPENVIKING_USER` | No | `default` | OpenViking user name |
+| `MCP_API_KEY` | No | — | MCP API Key (skip auth if unset) |
+| `GLM_API_KEY` | Dream Cycle | — | LLM API Key (Dream Cycle / Memory Sync) |
 | `GLM_BASE_URL` | Dream Cycle | — | LLM API Base URL |
-| `DREAM_CYCLE_MODEL` | Dream Cycle | `glm-4-flash` | Dream Cycle 使用的 LLM 模型 |
-| `MEMORY_TO_WIKI_MODEL` | Memory Sync | `glm-4-flash` | Memory Sync 使用的 LLM 模型 |
-| `NOTION_API_KEY` | Notion Sync | — | Notion API Key（不设置则跳过 Notion 同步） |
-| `NOTION_DB_ENTITY` | Notion Sync | — | Notion Entity 数据库 ID |
-| `NOTION_DB_CONCEPT` | Notion Sync | — | Notion Concept 数据库 ID |
-| `NOTION_DB_COMPARISON` | Notion Sync | — | Notion Comparison 数据库 ID |
-| `NOTION_DB_QUERY` | Notion Sync | — | Notion Query 数据库 ID |
-| `WEBDAV_BASE_URL` | NAS Sync | — | NAS WebDAV 地址 |
-| `WEBDAV_USER` | NAS Sync | — | WebDAV 用户名 |
-| `WEBDAV_PASS` | NAS Sync | — | WebDAV 密码 |
+| `DREAM_CYCLE_MODEL` | Dream Cycle | `glm-4-flash` | LLM model for Dream Cycle |
+| `MEMORY_TO_WIKI_MODEL` | Memory Sync | `glm-4-flash` | LLM model for Memory Sync |
+| `NOTION_API_KEY` | Notion Sync | — | Notion API Key (skip Notion sync if unset) |
+| `NOTION_DB_ENTITY` | Notion Sync | — | Notion Entity database ID |
+| `NOTION_DB_CONCEPT` | Notion Sync | — | Notion Concept database ID |
+| `NOTION_DB_TOOL` | Notion Sync | — | Notion Tool database ID |
+| `NOTION_DB_PROJECT` | Notion Sync | — | Notion Project database ID |
 
 ### .env.example
 
 ```env
 # === MCP Server ===
 MCP_PORT=8764
-# MCP_API_KEY=***    # 不设置则跳过认证（内网环境推荐）
+# MCP_API_KEY=***    # Leave unset to skip auth (recommended for LAN)
 
-# === OpenViking (可选) ===
+# === OpenViking (optional) ===
 # OPENVIKING_ENDPOINT=http://localhost:1933
 # OPENVIKING_API_KEY=***
 # OPENVIKING_ACCOUNT=hermes
 # OPENVIKING_USER=default
 
-# === LLM (Dream Cycle + Memory Sync 需要) ===
+# === LLM (required for Dream Cycle + Memory Sync) ===
 # GLM_API_KEY=***
 # GLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4
 # DREAM_CYCLE_MODEL=glm-4-flash
 # MEMORY_TO_WIKI_MODEL=glm-4-flash
 
-# === Notion (可选) ===
+# === Notion (optional) ===
 # NOTION_API_KEY=***
 # NOTION_DB_ENTITY=ntn_xxxxxxxx
 # NOTION_DB_CONCEPT=ntn_xxxxxxxx
-# NOTION_DB_COMPARISON=ntn_xxxxxxxx
-# NOTION_DB_QUERY=ntn_xxxxxxxx
-
-# === WebDAV / NAS (可选) ===
-# WEBDAV_BASE_URL=http://nas:5005/wiki
-# WEBDAV_USER=***
-# WEBDAV_PASS=***
+# NOTION_DB_TOOL=ntn_xxxxxxxx
+# NOTION_DB_PROJECT=ntn_xxxxxxxx
 ```
 
-## Docker Compose 配置
+## Docker Compose Configuration
 
 ```yaml
 services:
@@ -470,9 +472,9 @@ services:
     ports:
       - "0.0.0.0:8764:8764"
     volumes:
-      - ./wiki:/data                    # Wiki 数据
-      - ./scripts:/app/scripts           # 脚本（热更新，无需 rebuild）
-      - ./.env:/app/.env:ro             # 环境变量
+      - ./wiki:/data                    # Wiki data
+      - ./scripts:/app/scripts           # Scripts (hot-reload, no rebuild needed)
+      - ./.env:/app/.env:ro             # Environment variables
     env_file:
       - .env
     environment:
@@ -490,7 +492,7 @@ services:
         max-file: "3"
 ```
 
-**与 OpenViking 联合部署**（可选）：
+**Combined deployment with OpenViking** (optional):
 
 ```yaml
 services:
@@ -530,7 +532,7 @@ networks:
 
 ## Entity Registry
 
-内置实体管理系统，维护唯一 ID + 别名索引：
+Built-in entity management system with unique IDs + alias index:
 
 ```json
 {
@@ -556,57 +558,57 @@ networks:
 }
 ```
 
-### CLI 命令
+### CLI Commands
 
 ```bash
-# 扫描所有 wiki 页面，自动注册未注册的实体
+# Scan all wiki pages, auto-register unregistered entities
 docker exec wiki-brain python3 -m entity_registry scan
 
-# 列出所有实体
+# List all entities
 docker exec wiki-brain python3 -m entity_registry list
 
-# 搜索实体
+# Search entities
 docker exec wiki-brain python3 -m entity_registry search "openviking"
 
-# 检测重复实体
+# Detect duplicate entities
 docker exec wiki-brain python3 -m entity_registry dedup
 
-# 合并实体
+# Merge entities
 docker exec wiki-brain python3 -m entity_registry merge ent_a1b2c3 ent_d4e5f6
 
-# 重建索引
+# Rebuild index
 docker exec wiki-brain python3 -m entity_registry rebuild
 ```
 
-## 搜索
+## Search
 
-### 文件搜索（默认）
+### File Search (Default)
 
-OpenViking 不可用时，自动 fallback 到本地文件搜索（substring 匹配）。
+When OpenViking is unavailable, automatically falls back to local file search (substring matching).
 
-### OpenViking 语义搜索（可选）
+### OpenViking Semantic Search (Optional)
 
-配置 OpenViking 后，`wiki_search` 使用向量语义搜索：
+With OpenViking configured, `wiki_search` uses vector semantic search:
 
-1. `auto_index.py --sync` 将 wiki 页面同步到 OpenViking
-2. OpenViking 自动做语义提取 + 向量化
-3. `wiki_search` 调用 OpenViking API 返回语义相关结果
+1. `auto_index.py --sync` syncs wiki pages to OpenViking
+2. OpenViking auto-extracts semantics + vectorizes
+3. `wiki_search` calls OpenViking API to return semantically relevant results
 
-## 备份
+## Backup
 
 ```bash
-# 手动备份
+# Manual backup
 docker exec wiki-brain bash /app/scripts/wiki-backup.sh
 
-# 保留最近 3 个备份
+# Keep last 3 backups
 docker exec wiki-brain bash /app/scripts/wiki-backup.sh --keep 3
 ```
 
-备份排除 `logs/`、`__pycache__/`、`.git/`、`src/agency-agents/` 等大文件目录。
+Backup excludes `logs/`, `__pycache__/`, `.git/`, `src/agency-agents/` and other large directories.
 
-## 不依赖 OpenViking 的最小部署
+## Minimal Deployment (No OpenViking)
 
-如果你不需要语义搜索，可以只部署 Wiki KB MCP Server：
+If you don't need semantic search, you can deploy just the Wiki KB MCP Server:
 
 ```yaml
 # docker-compose.minimal.yml
@@ -629,76 +631,76 @@ services:
           cpus: "0.25"
 ```
 
-对应的 `.env`：
+Corresponding `.env`:
 ```env
 MCP_PORT=8764
-# 不设置 OPENVIKING_* 变量，搜索自动 fallback 到文件搜索
-# 不设置 GLM_* 变量，Dream Cycle 不可用但 Wiki CRUD 正常
+# Don't set OPENVIKING_* vars — search auto-falls back to file search
+# Don't set GLM_* vars — Dream Cycle unavailable but Wiki CRUD works fine
 ```
 
-## 开发
+## Development
 
-### 本地运行（不用 Docker）
+### Running Locally (Without Docker)
 
 ```bash
 cd wiki-kb
 
-# 安装依赖
-pip install mcp pyyaml requests
+# Install dependencies
+pip install -r requirements.txt
 
-# 设置环境变量
+# Set environment variables
 export WIKI_ROOT=./wiki
 export MCP_PORT=8764
 
-# 启动 MCP Server
+# Start MCP Server
 python scripts/wiki_mcp_server.py
 ```
 
-### 添加新脚本
+### Adding New Scripts
 
-1. 在 `scripts/` 目录创建新脚本
-2. 确保使用 `wiki_config.py` 的 `load_config()` 读取配置（或直接用 `WIKI_ROOT` 环境变量）
-3. 如果需要运行 entity_registry，import 前插入 `sys.path.insert(0, str(Path(__file__).parent))`
-4. 脚本通过 bind mount 直接生效，**不需要 rebuild 镜像**
+1. Create a new script in `scripts/`
+2. Use `wiki_config.py`'s `load_config()` to read config (or `WIKI_ROOT` env var directly)
+3. If importing `entity_registry`, add `sys.path.insert(0, str(Path(__file__).parent))` before import
+4. Scripts take effect via bind mount — **no image rebuild needed**
 
-### 修改 MCP Server
+### Modifying MCP Server
 
-编辑 `scripts/wiki_mcp_server.py`，然后：
+Edit `scripts/wiki_mcp_server.py`, then:
 
 ```bash
-# scripts/ 是 bind mount，修改后只需重启容器
+# scripts/ is bind-mounted, just restart the container
 docker compose restart
 ```
 
-## 常见问题
+## FAQ
 
-### Session Terminated 错误
+### Session Terminated Error
 
-MCP StreamableHTTP 使用有状态 session。长时间空闲后 session 可能过期。
+MCP StreamableHTTP uses stateful sessions. Sessions may expire after long idle periods.
 
-**已内置修复**：`wiki_mcp_server.py` 通过 monkey-patch 将 `session_idle_timeout` 设为 24 小时。
+**Built-in fix**: `wiki_mcp_server.py` monkey-patches `session_idle_timeout` to 24 hours via `StreamableHTTPSessionManager`.
 
-如果问题仍然出现，客户端侧应实现自动重连逻辑。
+If issues persist, the client should implement auto-reconnect logic.
 
-### API Key 认证不生效
+### API Key Auth Not Working
 
-FastMCP StreamableHTTP 模式下，`HTTP_AUTHORIZATION` 环境变量可能不被正确设置。
+Under FastMCP StreamableHTTP mode, the `HTTP_AUTHORIZATION` environment variable may not be correctly set.
 
-**解决方案**：
-1. 内网环境：清空 `MCP_API_KEY=`，跳过认证
-2. 需要认证：在客户端配置中添加 `headers: { Authorization: "Bearer <key>" }`
+**Solutions**:
+1. LAN environment: Leave `MCP_API_KEY` empty (skip auth)
+2. Auth required: Add `headers: { Authorization: "Bearer <key>" }` in client config
 
-### 端口绑定问题
+### Port Binding Issues
 
-如果 Wiki KB 和客户端不在同一台机器上，确保端口绑定 `0.0.0.0` 而不是 `127.0.0.1`。
+If Wiki KB and the client are on different machines, ensure the port binds to `0.0.0.0` instead of `127.0.0.1`.
 
-### OpenViking 同步失败
+### OpenViking Sync Fails
 
-`auto_index.py --sync` 使用两步 API：
-1. `POST /api/v1/resources/temp_upload` — 上传文件
-2. `POST /api/v1/resources` — 添加到 OpenViking
+`auto_index.py --sync` uses a two-step API:
+1. `POST /api/v1/resources/temp_upload` — upload file
+2. `POST /api/v1/resources` — add to OpenViking
 
-确保 `OPENVIKING_API_KEY`、`OPENVIKING_ACCOUNT`、`OPENVIKING_USER` 配置正确。
+Ensure `OPENVIKING_API_KEY`, `OPENVIKING_ACCOUNT`, and `OPENVIKING_USER` are configured correctly.
 
 ## License
 
