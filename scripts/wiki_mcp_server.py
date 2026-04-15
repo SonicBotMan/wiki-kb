@@ -159,13 +159,16 @@ class _FileLock:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self._fd is not None:
-            try:
+        try:
+            if self._fd is not None:
                 fcntl.flock(self._fd, fcntl.LOCK_UN)
-                os.close(self._fd)
-            except OSError:
-                pass
-        return False
+        finally:
+            if self._fd is not None:
+                try:
+                    os.close(self._fd)
+                except OSError:
+                    pass
+                self._fd = None
 
 
 
@@ -314,43 +317,63 @@ def _openviking_search(query: str, type_filter: str = "") -> List[Dict]:
             method="POST"
         )
 
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            result = json.loads(resp.read().decode('utf-8'))
-            # Parse OpenViking v1 response format
-            if result.get("status") == "ok":
-                items = []
-                for r in (result.get("result", {}).get("resources") or []):
-                    uri = r.get("uri", "")
-                    # 从 URI 提取 title: viking://resources/<name>/<file>
-                    parts = uri.rstrip("/").split("/")
-                    title = parts[-2] if len(parts) >= 2 else parts[-1]
-                    title = title.replace("_", " ")
-                    items.append({
-                        "title": title,
-                        "type": "",
-                        "page_path": "",
-                        "summary": r.get("abstract", ""),
-                    })
-                # Resolve page_path from title by matching local files
-                slug = _slugify(title)
-                for _sdir in sorted(ALLOWED_SUBDIRS):
-                    candidate = WIKI_ROOT / _sdir / f"{slug}.md"
-                    if candidate.exists():
-                        try:
-                            _c = candidate.read_text(encoding="utf-8")
-                            _fm, _ = _get_frontmatter(_c)
-                            items[-1]["page_path"] = str(candidate.relative_to(WIKI_ROOT))
-                            items[-1]["type"] = _fm.get("type", "")
-                        except Exception:
-                            pass
-                        break
-
-                _logger.info("openviking_search: query=%r type=%r → %d results", query, type_filter, len(items))
-                return items
-            else:
-                err = result.get("error", {})
-                _logger.warning("openviking_search: query=%r → error: %s", query, err.get("message", result))
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                result = json.loads(resp.read().decode('utf-8'))
+        except urllib.error.HTTPError as e:
+            _logger.warning("OpenViking HTTP %s for query: %s", e.code, query)
             return []
+        except urllib.error.URLError as e:
+            _logger.warning("OpenViking connection failed: %s (query: %s)", e.reason, query)
+            return []
+        except Exception as e:
+            _logger.warning("OpenViking request failed: %s (query: %s)", e, query)
+            return []
+        # Parse OpenViking v1 response format
+        if result.get("status") == "ok":
+            items = []
+            for r in (result.get("result", {}).get("resources") or []):
+                uri = r.get("uri", "")
+                # 从 URI 提取 title: viking://resources/<name>/<file>
+                parts = uri.rstrip("/").split("/")
+                title = parts[-2] if len(parts) >= 2 else parts[-1]
+                title = title.replace("_", " ")
+                items.append({
+                    "title": title,
+                    "type": "",
+                    "page_path": "",
+                    "summary": r.get("abstract", ""),
+                })
+            # Resolve page_path from title by matching local files
+            slug = _slugify(title)
+            for _sdir in sorted(ALLOWED_SUBDIRS):
+                candidate = WIKI_ROOT / _sdir / f"{slug}.md"
+                if candidate.exists():
+                    try:
+                        _c = candidate.read_text(encoding="utf-8")
+                        _fm, _ = _get_frontmatter(_c)
+                        items[-1]["page_path"] = str(candidate.relative_to(WIKI_ROOT))
+                        items[-1]["type"] = _fm.get("type", "")
+                    except Exception:
+                        pass
+                    break
+
+            _logger.info("openviking_search: query=%r type=%r → %d results", query, type_filter, len(items))
+            # Deduplicate: prefer page_path, fallback to title
+            seen = set()
+            unique = []
+            for item in items:
+                key = item.get("page_path") or item.get("title", "")
+                if key and key in seen:
+                    continue
+                if key:
+                    seen.add(key)
+                unique.append(item)
+            return unique
+        else:
+            err = result.get("error", {})
+            _logger.warning("openviking_search: query=%r → error: %s", query, err.get("message", result))
+        return []
 
     except Exception as e:
         _logger.warning("openviking_search: query=%r → fallback (%s: %s)", query, type(e).__name__, e)
@@ -1294,28 +1317,44 @@ def _append_timeline_entry(page_path: Path, event: str, source: str = ""):
 # Entry point
 # ============================================================
 if __name__ == "__main__":
-    _mcp_port = os.environ.get("MCP_PORT", "8764")
-    
-    # Security warning if no auth configured
-    if not os.environ.get("MCP_API_KEY", ""):
-        _logger.warning(
-            "MCP_API_KEY is NOT set — MCP Server has NO authentication! "
-            "Anyone who can reach port %s can read/write the wiki. "
-            "Set MCP_API_KEY env var if this is not a trusted LAN.",
-            _mcp_port
-        )
+    _mcp_port = int(os.environ.get("MCP_PORT", "8764"))
+    _mcp_api_key = os.environ.get("MCP_API_KEY", "")
 
-    # Signal handlers for graceful shutdown
+    class _APIKeyMiddleware:
+        """Starlette ASGI middleware enforcing MCP_API_KEY."""
+        def __init__(self, app, api_key):
+            self.app = app
+            self.api_key = api_key
+        async def __call__(self, scope, receive, send):
+            if scope["type"] == "http" and self.api_key:
+                headers = dict(scope.get("headers", []))
+                auth = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
+                key_hdr = headers.get(b"x-api-key", b"").decode("utf-8", errors="ignore")
+                if auth != f"Bearer {self.api_key}" and key_hdr != self.api_key:
+                    from starlette.responses import JSONResponse
+                    r = JSONResponse({"error": "Unauthorized", "message": "API key required"}, status_code=401)
+                    await r(scope, receive, send)
+                    return
+            await self.app(scope, receive, send)
+
+    if _mcp_api_key:
+        _logger.info("MCP API Key authentication ENABLED")
+    else:
+        _logger.warning(
+            "MCP_API_KEY is NOT set - MCP Server has NO authentication! "
+            "Port %s is open to all LAN clients.", _mcp_port)
+
     def _shutdown(signum, frame):
-        _logger.info("Received signal %s, shutting down gracefully...", signum)
+        _logger.info("Signal %s, shutting down...", signum)
         import sys
         sys.exit(0)
-
     signal.signal(signal.SIGTERM, _shutdown)
     signal.signal(signal.SIGINT, _shutdown)
 
-    _logger.info(
-        "Wiki Brain MCP Server starting (WIKI_ROOT=%s, port=%s)",
-        WIKI_ROOT, _mcp_port
-    )
-    mcp.run(transport="streamable-http")
+    _logger.info("Wiki Brain MCP Server starting (WIKI_ROOT=%s, port=%s)", WIKI_ROOT, _mcp_port)
+
+    _app = mcp.streamable_http_app()
+    if _mcp_api_key:
+        _app = _APIKeyMiddleware(_app, _mcp_api_key)
+    import uvicorn
+    uvicorn.run(_app, host="0.0.0.0", port=_mcp_port)

@@ -1,3 +1,19 @@
+## v1.3.0 (2026-04-16)
+
+### Security
+- **P0-2**: MCP API Key authentication via Starlette ASGI middleware. Supports `Authorization: Bearer <key>` and `X-API-Key` header. When `MCP_API_KEY` is set, all unauthenticated requests return 401. Server startup via uvicorn with optional middleware wrapping.
+
+### Reliability
+- **P1-3**: OpenViking HTTP error handling — `urllib.request.urlopen` wrapped with try/except for HTTPError, URLError, and generic Exception. Returns empty list on failure instead of crashing.
+- **P1-2**: `_FileLock.__exit__` hardened — `fcntl.flock(LOCK_UN)` and `os.close(fd)` separated into try/finally to prevent fd leak on exception.
+
+### Features
+- **P1-1**: wiki_search dedup — OpenViking often returns multiple chunks for the same page. Deduplication by title (fallback from page_path) reduces noise.
+
+### Tests
+- All 35 tests passing (container + local).
+- No new tests added (existing coverage validates changes).
+
 
 ## v1.2.0 (2026-04-15)
 
