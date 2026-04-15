@@ -178,6 +178,7 @@ wiki-kb/
 │   ├── wiki-to-notion.py       # Wiki → Notion 同步
 │   ├── migrate_wiki_schema.py  # v2 → v3 Schema 迁移工具
 │   └── wiki-backup.sh          # 备份脚本
+├── wiki-kb-sync.sh             # 一键同步（容器 → GitHub）
 ├── wiki/                       # 知识库数据（bind mount 到容器）
 │   ├── concepts/               # 心智模型、框架、技术概念
 │   ├── entities/               # 产品、组织、公司、平台
@@ -632,6 +633,43 @@ MCP_PORT=8764
 # 不设置 OPENVIKING_* 变量，搜索自动 fallback 到文件搜索
 # 不设置 GLM_* 变量，Dream Cycle 不可用但 Wiki CRUD 正常
 ```
+
+## 容器 → GitHub 同步
+
+`wiki-kb-sync.sh` 脚本用于保持 GitHub 仓库与生产容器的同步。
+
+### 核心原则
+> **容器是生产真相。GitHub 是下游。** 禁止通过 GitHub PR 修改容器脚本。
+
+### 使用模式
+
+```bash
+# 仅检查漂移（不推送变更）
+./wiki-kb-sync.sh --check
+
+# 完整同步：检测漂移 → 敏感信息扫描 → 双语对齐检查 → 提交并推送
+./wiki-kb-sync.sh
+
+# 列出将被同步的文件
+./wiki-kb-sync.sh --files
+
+# 根据漂移生成更新日志
+./wiki-kb-sync.sh --changelog
+```
+
+### 退出码
+| 代码 | 含义 |
+|------|------|
+| 0 | 成功（无漂移，或已同步） |
+| 1 | 检测到漂移（`--check` 模式） |
+| 2 | 发现敏感信息（中止） |
+| 3 | Git 推送失败 |
+| 4 | 缺少前置依赖 |
+
+### 安全漂移处理
+容器与 GitHub 之间的某些差异是预期且无害的：
+- **Notion UUID 默认值**：容器使用真实 UUID 作为回退值；GitHub 使用空字符串以保障安全
+- 这些差异会被自动检测并忽略（比较前自动剔除）
 
 ## 开发
 

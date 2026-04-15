@@ -4,6 +4,9 @@ All notable changes to the wiki-kb project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **wiki-kb-sync.sh**: 一键同步脚本，支持 `--check`（漂移检测）、`--files`（文件列表）、`--changelog`（生成日志）模式，内置敏感信息扫描和 README 双语对齐检查
+
 ## [1.0.0] - 2026-04-15
 
 ### Added

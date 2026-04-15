@@ -178,6 +178,7 @@ wiki-kb/
 │   ├── wiki-to-notion.py       # Wiki → Notion sync
 │   ├── migrate_wiki_schema.py  # v2 → v3 schema migration
 │   └── wiki-backup.sh          # Backup script
+├── wiki-kb-sync.sh             # One-command sync (container → GitHub)
 ├── wiki/                       # Knowledge base data (bind-mounted into container)
 │   ├── concepts/               # Mental models, frameworks, technical concepts
 │   ├── entities/               # Products, organizations, companies, platforms
@@ -637,6 +638,43 @@ MCP_PORT=8764
 # Don't set OPENVIKING_* vars — search auto-falls back to file search
 # Don't set GLM_* vars — Dream Cycle unavailable but Wiki CRUD works fine
 ```
+
+## Container → GitHub Sync
+
+The `wiki-kb-sync.sh` script keeps GitHub in sync with the production Docker container.
+
+### Principle
+> **Container is production truth. GitHub is downstream.** Never edit container scripts via GitHub PRs.
+
+### Modes
+
+```bash
+# Check drift only (no changes pushed)
+./wiki-kb-sync.sh --check
+
+# Full sync: detect drift → sensitive scan → bilingual check → commit & push
+./wiki-kb-sync.sh
+
+# List files that would be synced
+./wiki-kb-sync.sh --files
+
+# Generate changelog entry from drift
+./wiki-kb-sync.sh --changelog
+```
+
+### Exit Codes
+| Code | Meaning |
+|------|---------|
+| 0 | Success (no drift, or synced) |
+| 1 | Drift detected (in `--check` mode) |
+| 2 | Sensitive information found (abort) |
+| 3 | Git push failed |
+| 4 | Missing prerequisites |
+
+### Safe Drift Handling
+Some differences between container and GitHub are expected and benign:
+- **Notion UUID defaults**: Container uses real UUIDs as fallbacks; GitHub uses empty strings for security
+- These are automatically detected and ignored (stripped before comparison)
 
 ## Development
 
