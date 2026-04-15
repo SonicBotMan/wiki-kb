@@ -20,13 +20,13 @@ set -euo pipefail
 # Configuration
 # ============================================================
     
-NAS_USER="${NAS_USER:-REDACTED_USER}"
-NAS_HOST="${NAS_HOST:-REDACTED_IP}"
+NAS_USER="${NAS_USER:?NAS_USER not set}"
+NAS_HOST="${NAS_HOST:?NAS_HOST not set}"
 CONTAINER="${CONTAINER:-wiki-brain}"
 REPO_URL="${REPO_URL:-https://github.com/SonicBotMan/wiki-kb.git}"
 REPO_BRANCH="${REPO_BRANCH:-main}"
 GIT_NAME="${GIT_NAME:-SonicBotMan}"
-GIT_EMAIL="${GIT_EMAIL:-REDACTED_EMAIL}"
+GIT_EMAIL="${GIT_EMAIL:?GIT_EMAIL not set}"
     
 # All syncable script files
 ALL_SCRIPTS=(
@@ -232,7 +232,7 @@ SENSITIVE_FOUND=0
 scan_pattern() {
   local desc="$1" pattern="$2" severity="${3:-CRITICAL}"
   local matches
-  matches=$(grep -rn -P "$pattern" "$SCAN_DIR/scripts/" "$SCAN_DIR/README.md" "$SCAN_DIR/README_zh.md" "$SCAN_DIR/CHANGELOG.md" "$SCAN_DIR/.env.example" 2>/dev/null || true)
+  matches=$(grep -rn -P "$pattern" "$SCAN_DIR/scripts/" "$SCAN_DIR/wiki-kb-sync.sh" "$SCAN_DIR/README.md" "$SCAN_DIR/README_zh.md" "$SCAN_DIR/CHANGELOG.md" "$SCAN_DIR/.env.example" 2>/dev/null || true)
   if [[ -n "$matches" ]]; then
     log_err "${desc}: FOUND [${severity}]"
     echo "$matches" | head -10
