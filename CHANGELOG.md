@@ -7,6 +7,17 @@ All notable changes to the wiki-kb project will be documented in this file.
 ### Added
 - **wiki-kb-sync.sh**: 一键同步脚本，支持 `--check`（漂移检测）、`--files`（文件列表）、`--changelog`（生成日志）模式，内置敏感信息扫描和 README 双语对齐检查
 
+## [1.1.1] - 2026-04-15
+
+Post-review bugfixes — 3 bugs found by expert code review, all fixed and verified (27/27 tests pass).
+
+### Fixed
+- **BUG-1**: Test suite `conftest.py` now properly mocks `mcp` package — test environment no longer requires FastMCP installed. 27/27 pass (was 7 pass / 20 error).
+- **BUG-2**: `wiki_stats()` no longer crashes when `entity_registry` is unavailable — added `_REGISTRY_AVAILABLE` guard with fallback to empty stats.
+- **BUG-3**: `wiki_append_timeline()` race condition fixed — `read_text()` moved inside `_FileLock` scope. Previously read was outside lock, allowing concurrent appends to lose data.
+- Removed last Chinese error message in `entity_merge()` → `"Merge failed: one or both entities do not exist"`.
+- `wiki-kb-sync.sh`: `GIT_NAME` uses `${VAR:?msg}` pattern instead of hardcoded default.
+
 ## [1.1.0] - 2026-04-15
 
 Security hardening and code quality overhaul (RFC wiki-kb-issue-v2). 15 issues fixed across 3 batches, 27 tests added.

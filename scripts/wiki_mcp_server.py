@@ -602,45 +602,46 @@ def wiki_append_timeline(page_id: str, event: str, source: str = "") -> Dict:
     if not path:
         raise ValueError(f"Page not found: {page_id}")
 
-    original = path.read_text(encoding='utf-8')
-    fm, body = _get_frontmatter(original)
-
-    # 格式化 timeline 条目
-    now = datetime.now().strftime("%Y-%m-%d")
-    source_str = f"\n  [Source: {source}]" if source else ""
-    entry = f"- **{now}** | {event}{source_str}\n"
-
-    # 追加到 Timeline
-    timeline_marker = "## Timeline"
-    if timeline_marker in body:
-        # 在 Timeline section 追加
-        parts = body.split(timeline_marker)
-        before = parts[0]
-        after = parts[1] if len(parts) > 1 else ""
-
-        # 找到 --- 分隔线
-        if "---" in after:
-            sep_idx = after.index("---")
-            after = after[:sep_idx] + entry + "---\n" + after[sep_idx+3:]
-        else:
-            after = entry + after
-
-        body = before + timeline_marker + after
-    else:
-        # Timeline 不存在，创建它
-        body = body.rstrip()
-        if not body.endswith('\n'):
-            body += '\n'
-        body += f"\n---\n\n## Timeline\n\n{entry}"
-
-    # 更新 frontmatter
-    fm['updated'] = now
-
-    # Reassemble
-    fm_lines = [f"{k}: {v}" for k, v in fm.items()]
-    new_content = f"---\n" + "\n".join(fm_lines) + "\n---\n" + body
 
     with _FileLock(path):
+        original = path.read_text(encoding='utf-8')
+        fm, body = _get_frontmatter(original)
+
+        # 格式化 timeline 条目
+        now = datetime.now().strftime("%Y-%m-%d")
+        source_str = f"\n  [Source: {source}]" if source else ""
+        entry = f"- **{now}** | {event}{source_str}\n"
+
+        # 追加到 Timeline
+        timeline_marker = "## Timeline"
+        if timeline_marker in body:
+            # 在 Timeline section 追加
+            parts = body.split(timeline_marker)
+            before = parts[0]
+            after = parts[1] if len(parts) > 1 else ""
+
+            # 找到 --- 分隔线
+            if "---" in after:
+                sep_idx = after.index("---")
+                after = after[:sep_idx] + entry + "---\n" + after[sep_idx+3:]
+            else:
+                after = entry + after
+
+            body = before + timeline_marker + after
+        else:
+            # Timeline 不存在，创建它
+            body = body.rstrip()
+            if not body.endswith('\n'):
+                body += '\n'
+            body += f"\n---\n\n## Timeline\n\n{entry}"
+
+        # 更新 frontmatter
+        fm['updated'] = now
+
+        # Reassemble
+        fm_lines = [f"{k}: {v}" for k, v in fm.items()]
+        new_content = f"---\n" + "\n".join(fm_lines) + "\n---\n" + body
+
         _safe_write(path, new_content)
 
 
@@ -784,7 +785,7 @@ def entity_merge(id1: str, id2: str) -> Dict:
     else:
         return {
             "success": False,
-            "error": "合并失败，实体可能不存在"
+            "error": "Merge failed: one or both entities do not exist"
         }
 
 
@@ -817,15 +818,25 @@ def wiki_stats() -> Dict:
             _logger.warning("Failed to read page %s: %s: %s", md_file.name, type(e).__name__, e)
 
     # Registry 统计
-    reg = entity_registry.load_registry()
-    reg_stats = reg.get("stats", {})
+    if _REGISTRY_AVAILABLE:
+        try:
+            reg = entity_registry.load_registry()
+            reg_stats = reg.get("stats", {})
+            reg_version = reg.get("version", 1)
+        except Exception as e:
+            _logger.warning("Failed to load registry for stats: %s", e)
+            reg_stats = {}
+            reg_version = 0
+    else:
+        reg_stats = {}
+        reg_version = 0
 
     return {
         "total_pages": total_pages,
         "pages_by_type": page_counts,
         "total_entities": reg_stats.get("total_entities", 0),
         "total_aliases": reg_stats.get("total_aliases", 0),
-        "registry_version": reg.get("version", 1)
+        "registry_version": reg_version
     }
 
 

@@ -25,7 +25,7 @@ NAS_HOST="${NAS_HOST:?NAS_HOST not set}"
 CONTAINER="${CONTAINER:-wiki-brain}"
 REPO_URL="${REPO_URL:-https://github.com/SonicBotMan/wiki-kb.git}"
 REPO_BRANCH="${REPO_BRANCH:-main}"
-GIT_NAME="${GIT_NAME:-SonicBotMan}"
+GIT_NAME="${GIT_NAME:?GIT_NAME not set}"
 GIT_EMAIL="${GIT_EMAIL:?GIT_EMAIL not set}"
     
 # All syncable script files
