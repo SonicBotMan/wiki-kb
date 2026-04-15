@@ -7,6 +7,35 @@ All notable changes to the wiki-kb project will be documented in this file.
 ### Added
 - **wiki-kb-sync.sh**: 一键同步脚本，支持 `--check`（漂移检测）、`--files`（文件列表）、`--changelog`（生成日志）模式，内置敏感信息扫描和 README 双语对齐检查
 
+## [1.1.0] - 2026-04-15
+
+Security hardening and code quality overhaul (RFC wiki-kb-issue-v2). 15 issues fixed across 3 batches, 27 tests added.
+
+### Security (Batch 1 — `058181c`)
+- **P0-1**: Atomic writes via `_safe_write()` — `tempfile.NamedTemporaryFile` + `os.fsync()` + `os.replace()`. Replaced all 3 bare `write_text()` calls in `wiki_create`, `wiki_update`, `wiki_append_timeline`.
+- **P0-2**: Path traversal fix — `_validate_path()` now guards both exact-match and `rglob` fuzzy-match branches in `_resolve_page_path()`.
+- **P0-3**: Timeline section protection — `wiki_update()` rejects `timeline`/`Timeline`/` timeline ` (case+whitespace-insensitive). Section whitelist enforced: only `Executive Summary`, `Key Facts`, `Relations` allowed.
+- **P3-1**: `_FileLock` (fcntl.flock) protects all write operations — prevents CLI↔Gateway concurrent write corruption. Per-page lock files, not global.
+- **P3-3**: Startup warning when `MCP_API_KEY` is not set (server runs without authentication).
+
+### Refactor (Batch 2 — `24889cc`)
+- **P1-1**: Unified frontmatter parser — `wiki_mcp_server` now imports `get_frontmatter` from `wiki_utils` (removed duplicate 15-line regex-based parser). Date normalization: `datetime.date` objects auto-converted to `YYYY-MM-DD` strings.
+- **P1-4**: Replaced 3 silent `except Exception: continue` with `_logger.warning()` + context.
+- **P1-5**: Removed 82-line inline `entity_registry` stub. Clean `from entity_registry import EntityRegistry` + `_REGISTRY_AVAILABLE` flag. All 4 entity tools check availability before use. `wiki_create` degrades gracefully when registry unavailable.
+- **P2-1**: Test framework — 5 test files, 27 tests covering path validation, atomic writes, file locks, timeline protection, section whitelist, frontmatter parsing + date normalization.
+- **P2-4**: Error/log messages converted from Chinese to English (12 messages across path validation, type checking, page lookup, startup/shutdown).
+
+### Refactor (Batch 3 — `7fcbac1`)
+- **P1-2**: Unified `TYPE_DIR_MAP`, `ALLOWED_SUBDIRS`, `ALLOWED_TYPES` to `wiki_utils.py`. Eliminated 3 hardcoded directory lists in `wiki_mcp_server.py`. `_resolve_page_path()` uses `sorted(ALLOWED_SUBDIRS)`, `wiki_create()` uses shared `TYPE_DIR_MAP`.
+- **P1-6**: Enhanced `wiki_health()` — 6 checks (registry integrity, entity_registry availability, disk writable, disk space, OpenViking connectivity, page count). All messages in English.
+- **P3-2**: `wiki_create` rollback — if `entity_registry.register()` fails after page creation, page is deleted and `RuntimeError` raised. Prevents orphan pages.
+- **P2-4**: Final Chinese message cleanup — `entity_merge` template + `wiki_create` template converted to English.
+
+### Fixed
+- **Batch 2**: `_logger.addHandler(_sh)` was outside `if not _logger.handlers:` block — caused `NameError` when handlers already existed.
+- **Batch 3**: Restored `if __name__ == "__main__"` entry point (lost during batch-1 function deletion). Fixed `mcp.run()` call to use `transport="streamable-http"` (FastMCP API).
+- **Batch 3**: Removed duplicate `@mcp.tool()` decorators that caused "Tool already exists" warnings on startup. Cleared stale `__pycache__` on deploy.
+
 ## [1.0.0] - 2026-04-15
 
 ### Added
