@@ -9,10 +9,22 @@ echo "🔍 Running pre-push checks..."
 
 export PYTHONPATH="$ROOT/scripts"
 
-# Lint
-python -m py_compile scripts/wiki_mcp_server.py && \
-python -m py_compile scripts/wiki_utils.py && \
-echo "✅ Lint passed" || { echo "❌ Lint failed"; exit 1; }
+# Lint — all .py files in scripts/
+LINT_FAIL=0
+for f in scripts/*.py; do
+  if [[ -f "$f" ]]; then
+    echo "  Checking $f..."
+    if ! python -m py_compile "$f" 2>&1; then
+      LINT_FAIL=1
+    fi
+  fi
+done
+
+if [[ $LINT_FAIL -eq 1 ]]; then
+  echo "❌ Lint failed"
+  exit 1
+fi
+echo "✅ Lint passed"
 
 # Tests
 python -m pytest tests/ -v --tb=short || { echo "❌ Tests failed"; exit 1; }

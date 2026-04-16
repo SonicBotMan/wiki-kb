@@ -19,10 +19,13 @@ jobs:
       - name: Install dependencies
         run: pip install pyyaml pytest
 
-      - name: Lint
+      - name: Lint (all scripts)
         run: |
-          python -m py_compile scripts/wiki_mcp_server.py
-          python -m py_compile scripts/wiki_utils.py
+          for f in scripts/*.py; do
+            echo "Checking $f..."
+            python -m py_compile "$f"
+          done
+          echo "✅ Lint passed"
 
       - name: Tests
         run: PYTHONPATH=scripts pytest tests/ -v --tb=short

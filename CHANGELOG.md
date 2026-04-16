@@ -1,3 +1,17 @@
+## v1.4.0 (2026-04-16)
+
+### Tooling
+- **wiki-kb-sync.sh v2**: Complete rewrite — now a bidirectional sync tool.
+  - `--deploy`: local → NAS → container (py_compile → scp → verify → clear __pycache__ → restart → health wait → log check)
+  - `--deploy --push`: deploy + sync to GitHub in one command
+  - `--check` / default mode: container → GitHub (unchanged functionality)
+  - **CHANGELOG gate**: warns if CHANGELOG.md not updated in changeset
+  - **Sensitive scan severity split**: CRITICAL patterns abort; WARNING patterns (Notion UUID, private IP, Chinese text) print only
+  - **Commit message required**: no auto-generated messages; must specify via `--changelog`
+  - **.syncignore support**: configurable safe-drift patterns beyond NOTION_DB_/ntn_
+  - **Safe diff filter fix**: use `grep -vE` (extended regex) so `|` alternation works correctly
+- **Lint coverage expanded**: Makefile, pre-push hook, and GitHub Actions CI now compile-check all `scripts/*.py` (was only wiki_mcp_server.py + wiki_utils.py)
+
 ## v1.3.1 (2026-04-16)
 
 ### Security
