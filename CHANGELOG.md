@@ -1,3 +1,13 @@
+## v1.4.1 (2026-04-16)
+
+### Tooling
+- **wiki-kb-sync.sh v2.1**: Adapted for NAS-hosted repo architecture.
+  - Source of truth moved from VM /tmp to NAS /vol1/1000/opencode/wiki-kb/
+  - `--deploy` now uses NAS-local `cp` instead of `scp` (same machine)
+  - `py_compile` runs inside container (NAS host Python has permission issues)
+  - Prerequisites check validates NAS repo and deploy dir existence
+  - Post-sync: auto-pull GitHub changes back to NAS repo (three-way consistency)
+
 ## v1.4.0 (2026-04-16)
 
 ### Tooling

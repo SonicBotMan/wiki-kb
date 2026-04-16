@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # wiki-kb-sync.sh — wiki-kb 双向同步工具
 #
-# 容器→GitHub 方向（已有）:
+# 源码在 NAS: /vol1/1000/opencode/wiki-kb/
+# 部署在 NAS: /vol1/1000/wiki/scripts/ (bind mount → 容器)
+# 远程备份:   GitHub SonicBotMan/wiki-kb
+#
+# 容器→GitHub 方向:
 #   ./wiki-kb-sync.sh                          # 完整同步：导出→扫描→commit→push→验证
 #   ./wiki-kb-sync.sh --check                  # 仅检查漂移，不推送
 #   ./wiki-kb-sync.sh --files dream_cycle.py   # 仅同步指定文件
 #
-# 本地→NAS→容器 方向（新增）:
-#   ./wiki-kb-sync.sh --deploy                 # 部署到 NAS + 容器重启 + 验证
+# NAS repo→容器 方向:
+#   ./wiki-kb-sync.sh --deploy                 # 部署到容器（NAS本地cp→清缓存→重启→验证）
 #   ./wiki-kb-sync.sh --deploy --push          # 部署 + 同步到 GitHub（完整流程）
 #   ./wiki-kb-sync.sh --deploy --files xx.py   # 部署指定文件
 #
@@ -21,7 +25,6 @@
 #   3  — 同步/验证失败
 #   4  — 缺少前置依赖
 #   5  — 部署后容器不健康
-#   6  — CHANGELOG 未更新（警告，仅 --push 模式中止）
 
 set -euo pipefail
 
@@ -36,8 +39,11 @@ REPO_URL="${REPO_URL:-https://github.com/SonicBotMan/wiki-kb.git}"
 REPO_BRANCH="${REPO_BRANCH:-main}"
 GIT_NAME="${GIT_NAME:-SonicBotMan}"
 GIT_EMAIL="${GIT_EMAIL:?GIT_EMAIL not set}"
-NAS_SCRIPTS_DIR="/vol1/1000/wiki/scripts"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-120}"
+
+# Paths on NAS
+NAS_REPO_DIR="/vol1/1000/opencode/wiki-kb"
+NAS_DEPLOY_DIR="/vol1/1000/wiki/scripts"
 
 # All syncable script files
 ALL_SCRIPTS=(
@@ -53,15 +59,6 @@ ALL_SCRIPTS=(
   wiki-backup.sh
 )
 
-# Root-level files (deployed in --deploy mode)
-ROOT_FILES=(
-  Dockerfile
-  docker-compose.yml
-  docker-compose.production.yml
-  requirements.txt
-  .env.example
-)
-
 # Root-level docs (synced in container→GitHub mode)
 DOC_FILES=(
   README.md
@@ -71,7 +68,7 @@ DOC_FILES=(
   RESOLVER.md
 )
 
-# .syncignore — 额外的安全漂移过滤模式（每行一个 grep -P 模式）
+# .syncignore — 额外的安全漂移过滤模式
 SYNCIGNORE_FILE="${SYNCIGNORE_FILE:-.syncignore}"
 
 # ============================================================
@@ -82,7 +79,6 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
-BOLD='\033[1m'
 NC='\033[0m'
 
 log_info()  { echo -e "${CYAN}[INFO]${NC}  $*"; }
@@ -98,11 +94,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
+SSH_CMD="ssh ${NAS_USER}@${NAS_HOST}"
+
 # ============================================================
 # Parse Arguments
 # ============================================================
 
-MODE="sync"          # sync | check | deploy
+MODE="sync"
 SPECIFIC_FILES=()
 COMMIT_MSG=""
 DEPLOY_PUSH=0
@@ -115,7 +113,7 @@ while [[ $# -gt 0 ]]; do
     --files)       shift ;;
     --changelog)   COMMIT_MSG="$2"; shift 2 ;;
     -h|--help)
-      head -30 "$0" | grep '^#' | sed 's/^# \?//'
+      head -35 "$0" | grep '^#' | sed 's/^# \?//'
       exit 0
       ;;
     *)
@@ -125,12 +123,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# --push only valid with --deploy
 if [[ $DEPLOY_PUSH -eq 1 && "$MODE" != "deploy" ]]; then
   die "--push only valid with --deploy (exit 4)" 4
 fi
 
-# If --files specified, use specific files; otherwise all
 if [[ ${#SPECIFIC_FILES[@]} -gt 0 ]]; then
   SYNC_FILES=("${SPECIFIC_FILES[@]}")
 else
@@ -146,29 +142,35 @@ WORK_DIR=$(mktemp -d /tmp/wiki-kb-sync.XXXXXX)
 check_prerequisites() {
   log_step "Prerequisites"
 
-  # Check SSH connectivity
-  if ! ssh -o ConnectTimeout=5 "${NAS_USER}@${NAS_HOST}" \
+  if ! $SSH_CMD -o ConnectTimeout=5 \
     "docker ps --filter name=${CONTAINER} --format '{{.Names}}'" 2>/dev/null | grep -q "$CONTAINER"; then
     die "Cannot reach container '${CONTAINER}' via SSH (exit 4)" 4
   fi
   log_ok "Container '${CONTAINER}' reachable"
 
-  # Check git
   if ! command -v git &>/dev/null; then
     die "git not found (exit 4)" 4
   fi
   log_ok "git available"
 
-  # Check curl
-  if ! command -v curl &>/dev/null; then
-    die "curl not found (exit 4)" 4
+  # Verify NAS repo exists
+  if ! $SSH_CMD "test -d ${NAS_REPO_DIR}/.git" 2>/dev/null; then
+    die "NAS repo not found at ${NAS_REPO_DIR} (exit 4)" 4
   fi
+  log_ok "NAS repo: ${NAS_REPO_DIR}"
 
-  # Check MCP endpoint
-  if curl -sf -o /dev/null -w "" "http://${NAS_HOST}:8764/mcp" --connect-timeout 3 2>/dev/null; then
-    log_ok "MCP endpoint responding"
-  else
-    log_warn "MCP endpoint not responding (container may be restarting)"
+  # Verify deploy dir exists
+  if ! $SSH_CMD "test -d ${NAS_DEPLOY_DIR}" 2>/dev/null; then
+    die "Deploy dir not found at ${NAS_DEPLOY_DIR} (exit 4)" 4
+  fi
+  log_ok "Deploy dir: ${NAS_DEPLOY_DIR}"
+
+  if command -v curl &>/dev/null; then
+    if curl -sf -o /dev/null -w "" "http://${NAS_HOST}:8764/mcp" --connect-timeout 3 2>/dev/null; then
+      log_ok "MCP endpoint responding"
+    else
+      log_warn "MCP endpoint not responding (container may be restarting)"
+    fi
   fi
 }
 
@@ -177,38 +179,40 @@ check_prerequisites() {
 # ============================================================
 
 build_safe_diff_filter() {
-  # Default safe patterns (always excluded from drift detection)
   SAFE_PATTERNS="NOTION_DB_|ntn_"
-
-  # Load additional patterns from .syncignore if it exists
   if [[ -f "$SYNCIGNORE_FILE" ]]; then
     while IFS= read -r line || [[ -n "$line" ]]; do
-      # Skip empty lines and comments
       [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
       SAFE_PATTERNS="${SAFE_PATTERNS}|${line}"
     done < "$SYNCIGNORE_FILE"
     log_info "Loaded .syncignore patterns"
   fi
-
   echo "$SAFE_PATTERNS"
 }
 
 # ============================================================
-# Deploy: local → NAS → container
+# Deploy: NAS repo → NAS deploy dir → container
 # ============================================================
 
 do_deploy() {
-  local src_dir="${1:-./scripts}"
   local files=("${SYNC_FILES[@]}")
 
-  log_step "Deploy: local → NAS → container"
+  log_step "Deploy: NAS repo → container"
 
-  # --- Validate: py_compile all .py files before deploy ---
-  log_info "Running py_compile on all .py files..."
+  # --- Step 1: py_compile in container (NAS host python3 has permission issues) ---
+  log_info "Running py_compile in container..."
   COMPILE_FAIL=0
   for f in "${files[@]}"; do
-    if [[ "$f" == *.py && -f "${src_dir}/${f}" ]]; then
-      if python3 -m py_compile "${src_dir}/${f}" 2>&1; then
+    if [[ "$f" == *.py ]]; then
+      if $SSH_CMD "docker exec ${CONTAINER} python3 -c \"
+import py_compile, sys
+try:
+    py_compile.compile('/app/scripts/${f}', doraise=True)
+    print('OK')
+except py_compile.PyCompileError as e:
+    print(f'FAIL: {e}')
+    sys.exit(1)
+\"" 2>/dev/null | grep -q "OK"; then
         log_ok "  ${f}: compile OK"
       else
         log_err "  ${f}: COMPILE FAILED"
@@ -220,62 +224,52 @@ do_deploy() {
     die "py_compile failed — fix before deploy (exit 3)" 3
   fi
 
-  # --- SCP files to NAS (bind mount source) ---
-  log_info "Copying files to NAS..."
-  SCP_FAIL=0
+  # --- Step 2: Copy from NAS repo to NAS deploy dir (local cp, no scp needed) ---
+  log_info "Copying files on NAS (${NAS_REPO_DIR}/scripts/ → ${NAS_DEPLOY_DIR}/)..."
+  CP_FAIL=0
   for f in "${files[@]}"; do
-    if [[ -f "${src_dir}/${f}" ]]; then
-      if scp "${src_dir}/${f}" "${NAS_USER}@${NAS_HOST}:${NAS_SCRIPTS_DIR}/${f}" 2>/dev/null; then
-        # Immediately verify (scp can silently fail)
-        local fname=$(basename "$f")
-        local verify_marker
-        verify_marker=$(ssh "${NAS_USER}@${NAS_HOST}" \
-          "head -1 ${NAS_SCRIPTS_DIR}/${f}" 2>/dev/null || echo "")
-        local local_header
-        local_header=$(head -1 "${src_dir}/${f}" 2>/dev/null || echo "")
-        if [[ "$verify_marker" == "$local_header" ]]; then
-          log_ok "  ${f}: uploaded & verified"
-        else
-          log_err "  ${f}: VERIFICATION FAILED (first line mismatch)"
-          SCP_FAIL=1
-        fi
+    if $SSH_CMD "cp ${NAS_REPO_DIR}/scripts/${f} ${NAS_DEPLOY_DIR}/${f}" 2>/dev/null; then
+      # Verify: compare first line
+      local src_header dest_header
+      src_header=$($SSH_CMD "head -1 ${NAS_REPO_DIR}/scripts/${f}" 2>/dev/null)
+      dest_header=$($SSH_CMD "head -1 ${NAS_DEPLOY_DIR}/${f}" 2>/dev/null)
+      if [[ "$src_header" == "$dest_header" ]]; then
+        log_ok "  ${f}: copied & verified"
       else
-        log_err "  ${f}: scp failed"
-        SCP_FAIL=1
+        log_err "  ${f}: VERIFICATION FAILED"
+        CP_FAIL=1
       fi
     else
-      log_warn "  ${f}: not found locally, skipped"
+      log_err "  ${f}: copy failed"
+      CP_FAIL=1
     fi
   done
-  if [[ $SCP_FAIL -eq 1 ]]; then
-    die "Some files failed to upload — aborting deploy (exit 3)" 3
+  if [[ $CP_FAIL -eq 1 ]]; then
+    die "Some files failed to copy — aborting deploy (exit 3)" 3
   fi
 
-  # --- Clear __pycache__ ---
+  # --- Step 3: Clear __pycache__ ---
   log_info "Clearing __pycache__..."
-  ssh "${NAS_USER}@${NAS_HOST}" \
-    "rm -rf ${NAS_SCRIPTS_DIR}/__pycache__" 2>/dev/null || true
+  $SSH_CMD "rm -rf ${NAS_DEPLOY_DIR}/__pycache__" 2>/dev/null || true
   log_ok "__pycache__ cleared"
 
-  # --- Restart container ---
+  # --- Step 4: Restart container ---
   log_info "Restarting container '${CONTAINER}'..."
-  ssh "${NAS_USER}@${NAS_HOST}" "docker restart ${CONTAINER}" 2>/dev/null || true
+  $SSH_CMD "docker restart ${CONTAINER}" 2>/dev/null || true
 
-  # --- Wait for healthy ---
+  # --- Step 5: Wait for healthy ---
   log_info "Waiting for container to become healthy (timeout=${HEALTH_TIMEOUT}s)..."
   HEALTH_OK=0
   ELAPSED=0
   while [[ $ELAPSED -lt $HEALTH_TIMEOUT ]]; do
     sleep 3
     ELAPSED=$((ELAPSED + 3))
-    STATUS=$(ssh "${NAS_USER}@${NAS_HOST}" \
-      "docker inspect --format='{{.State.Health.Status}}' ${CONTAINER}" 2>/dev/null || echo "unknown")
+    STATUS=$($SSH_CMD "docker inspect --format='{{.State.Health.Status}}' ${CONTAINER}" 2>/dev/null || echo "unknown")
     if [[ "$STATUS" == "healthy" ]]; then
       HEALTH_OK=1
       log_ok "Container healthy after ${ELAPSED}s"
       break
     fi
-    # Show progress every 15s
     if [[ $((ELAPSED % 15)) -eq 0 ]]; then
       log_info "  ... still waiting (${ELAPSED}s, status=${STATUS})"
     fi
@@ -283,17 +277,14 @@ do_deploy() {
   if [[ $HEALTH_OK -eq 0 ]]; then
     log_err "Container did not become healthy within ${HEALTH_TIMEOUT}s"
     log_err "Last status: ${STATUS}"
-    log_err "Container logs:"
-    ssh "${NAS_USER}@${NAS_HOST}" "docker logs ${CONTAINER} --tail 20" 2>/dev/null || true
+    $SSH_CMD "docker logs ${CONTAINER} --tail 20" 2>/dev/null || true
     die "Container unhealthy after deploy (exit 5)" 5
   fi
 
-  # --- Post-deploy verification ---
+  # --- Step 6: Post-deploy verification ---
   log_info "Running post-deploy verification..."
 
-  # 1. Container logs — no ERROR
-  ERRORS=$(ssh "${NAS_USER}@${NAS_HOST}" \
-    "docker logs ${CONTAINER} --tail 30 2>&1" | grep -i "error\|traceback\|exception" || true)
+  ERRORS=$($SSH_CMD "docker logs ${CONTAINER} --tail 30 2>&1" | grep -i "error\|traceback\|exception" || true)
   if [[ -n "$ERRORS" ]]; then
     log_warn "Errors found in container logs:"
     echo "$ERRORS" | head -5
@@ -301,13 +292,14 @@ do_deploy() {
     log_ok "No errors in container logs"
   fi
 
-  # 2. MCP health endpoint
-  HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" \
-    "http://${NAS_HOST}:8764/mcp" --connect-timeout 5 2>/dev/null || echo "000")
-  if [[ "$HTTP_CODE" =~ ^[2-4] ]]; then
-    log_ok "MCP endpoint: HTTP ${HTTP_CODE}"
-  else
-    log_warn "MCP endpoint: HTTP ${HTTP_CODE} (may need more time)"
+  if command -v curl &>/dev/null; then
+    HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" \
+      "http://${NAS_HOST}:8764/mcp" --connect-timeout 5 2>/dev/null || echo "000")
+    if [[ "$HTTP_CODE" =~ ^[2-4] ]]; then
+      log_ok "MCP endpoint: HTTP ${HTTP_CODE}"
+    else
+      log_warn "MCP endpoint: HTTP ${HTTP_CODE}"
+    fi
   fi
 
   log_ok "Deploy complete"
@@ -330,13 +322,11 @@ do_export_and_drift() {
 
   for f in "${files[@]}"; do
     mkdir -p "$(dirname "${EXPORT_DIR}/$f")"
-    if ssh "${NAS_USER}@${NAS_HOST}" \
+    if $SSH_CMD \
       "docker exec ${CONTAINER} cat /app/scripts/$f" > "${EXPORT_DIR}/$f" 2>/dev/null; then
 
-      # Check drift (with safe-pattern filtering)
       if ! diff -q "${EXPORT_DIR}/$f" "${clone_dir}/scripts/$f" >/dev/null 2>&1; then
         SAFE_DIFF=0
-        # Filter out known-safe patterns
         diff -q <(grep -vE "$safe_filter" "${EXPORT_DIR}/$f" 2>/dev/null || true) \
                  <(grep -vE "$safe_filter" "${clone_dir}/scripts/$f" 2>/dev/null || true) >/dev/null 2>&1 && SAFE_DIFF=1
 
@@ -353,16 +343,6 @@ do_export_and_drift() {
       log_warn "SKIP: scripts/$f (not found in container)"
     fi
   done
-
-  # Also sync root doc files in full sync mode
-  if [[ "$MODE" == "sync" && ${#SPECIFIC_FILES[@]} -eq 0 ]]; then
-    for f in "${DOC_FILES[@]}"; do
-      if [[ -f "${clone_dir}/$f" ]]; then
-        # Root files come from the local repo, not container
-        log_info "Root file present: $f"
-      fi
-    done
-  fi
 
   echo ""
   if [[ $DRIFT_COUNT -eq 0 ]]; then
@@ -418,7 +398,7 @@ do_sensitive_scan() {
     fi
   }
 
-  # === CRITICAL: must fix before push ===
+  # === CRITICAL ===
   scan_pattern "Phone numbers (CN)"       '1[3-9]\d{9}'
   scan_pattern "Hardcoded API key"        'api_key\s*=\s*['\''"][a-zA-Z0-9]'
   scan_pattern "Hardcoded password"       'password\s*=\s*['\''"]'
@@ -430,8 +410,7 @@ do_sensitive_scan() {
   scan_pattern "Telegram bot token"       '\d{8,10}:[A-Za-z0-9_\-]{35}'
   scan_pattern "JWT"                      'eyJ[a-zA-Z0-9_-]{20,}\.eyJ[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{20,}'
 
-  # === WARNING: review but don't abort ===
-  # (Notion UUID, private IP, Chinese text — common in config/docs)
+  # === WARNING (non-blocking) ===
   scan_pattern "Notion UUID"              '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' 'WARNING'
   scan_pattern "Private IP"               '192\.168\.|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.' 'WARNING'
   scan_pattern "Chinese text (3+ chars)"  '[\x{4e00}-\x{9fff}]{3,}' 'WARNING'
@@ -440,7 +419,6 @@ do_sensitive_scan() {
   if [[ $CRITICAL_FOUND -eq 1 ]]; then
     echo ""
     log_err "CRITICAL sensitive information detected — SYNC ABORTED"
-    log_err "Fix the issues above before retrying"
     die "Exit 2" 2
   fi
 
@@ -468,7 +446,6 @@ do_readme_check() {
       log_warn "README section count mismatch: EN=${en_lines} ZH=${zh_lines}"
     fi
 
-    # Check language switch links
     if grep -q '\[English\](README.md)' "${clone_dir}/README.md" && \
        grep -q '\[English\](README.md)' "${clone_dir}/README_zh.md"; then
       log_ok "Language switch links present"
@@ -494,19 +471,15 @@ do_changelog_check() {
     return 1
   fi
 
-  # Check if CHANGELOG.md has been modified (staged or in recent commits)
-  local changelog_dirty
+  local changelog_dirty staged last_commit_files
   changelog_dirty=$(git -C "$clone_dir" diff --name-only HEAD -- CHANGELOG.md 2>/dev/null || true)
-  local changelog_staged
-  changelog_staged=$(git -C "$clone_dir" diff --cached --name-only -- CHANGELOG.md 2>/dev/null || true)
+  staged=$(git -C "$clone_dir" diff --cached --name-only -- CHANGELOG.md 2>/dev/null || true)
 
-  if [[ -n "$changelog_dirty" || -n "$changelog_staged" ]]; then
+  if [[ -n "$changelog_dirty" || -n "$staged" ]]; then
     log_ok "CHANGELOG.md has been updated"
     return 0
   fi
 
-  # Check if the most recent commit already updated CHANGELOG
-  local last_commit_files
   last_commit_files=$(git -C "$clone_dir" diff --name-only HEAD~1 HEAD 2>/dev/null || true)
   if echo "$last_commit_files" | grep -q "CHANGELOG.md"; then
     log_ok "CHANGELOG.md updated in latest commit"
@@ -515,7 +488,7 @@ do_changelog_check() {
 
   log_warn "CHANGELOG.md not updated in this changeset"
   log_warn "Consider adding a CHANGELOG entry before pushing"
-  return 0  # Warning only, not blocking
+  return 0
 }
 
 # ============================================================
@@ -532,7 +505,6 @@ do_commit_push() {
 
   log_step "Commit & push"
 
-  # Require explicit commit message when there are drifted files
   if [[ $DRIFT_COUNT -gt 0 && -z "$COMMIT_MSG" ]]; then
     log_err "Commit message required when files have changed"
     log_err "Usage: $0 --changelog \"type: description\""
@@ -541,7 +513,6 @@ do_commit_push() {
 
   git -C "$clone_dir" add -A
 
-  # Show staged changes
   echo ""
   git -C "$clone_dir" diff --cached --stat
   echo ""
@@ -576,7 +547,6 @@ do_post_push_verify() {
       continue
     fi
     if ! diff -q "${EXPORT_DIR}/$f" "${VERIFY_DIR}/scripts/$f" >/dev/null 2>&1; then
-      # Re-check with safe filter
       if diff -q <(grep -vE "$safe_filter" "${EXPORT_DIR}/$f" 2>/dev/null || true) \
                <(grep -vE "$safe_filter" "${VERIFY_DIR}/scripts/$f" 2>/dev/null || true) >/dev/null 2>&1; then
         log_ok "VERIFIED (safe diff): scripts/$f"
@@ -598,6 +568,19 @@ do_post_push_verify() {
 }
 
 # ============================================================
+# Sync NAS repo back to NAS deploy dir (used by --deploy --push)
+# ============================================================
+
+sync_nas_repo_to_deploy() {
+  log_info "Syncing NAS repo scripts to deploy dir..."
+  for f in "${SYNC_FILES[@]}"; do
+    $SSH_CMD "cp ${NAS_REPO_DIR}/scripts/${f} ${NAS_DEPLOY_DIR}/${f}" 2>/dev/null || true
+  done
+  $SSH_CMD "rm -rf ${NAS_DEPLOY_DIR}/__pycache__" 2>/dev/null || true
+  log_ok "NAS repo synced to deploy dir"
+}
+
+# ============================================================
 # Main: dispatch by mode
 # ============================================================
 
@@ -606,11 +589,9 @@ SAFE_FILTER=$(build_safe_diff_filter)
 
 case "$MODE" in
   deploy)
-    # --- Deploy mode: local → NAS → container ---
-    do_deploy "./scripts"
+    do_deploy
 
     if [[ $DEPLOY_PUSH -eq 1 ]]; then
-      # Also sync to GitHub after deploy
       log_step "Deploy complete, now syncing to GitHub..."
 
       CLONE_DIR="${WORK_DIR}/wiki-kb"
@@ -621,19 +602,24 @@ case "$MODE" in
       git config user.name "$GIT_NAME"
       git config user.email "$GIT_EMAIL"
 
+      # Also sync any files from deploy dir back to clone (container may have env-specific values)
       do_export_and_drift "$CLONE_DIR" "$SAFE_FILTER"
       do_sensitive_scan "$CLONE_DIR"
       do_readme_check "$CLONE_DIR"
       do_changelog_check "$CLONE_DIR"
       do_commit_push "$CLONE_DIR"
       do_post_push_verify "$CLONE_DIR" "$SAFE_FILTER"
+
+      # Sync NAS repo with what we just pushed (pull latest from GitHub)
+      $SSH_CMD "cd ${NAS_REPO_DIR} && git fetch origin main && git reset --hard origin/main" 2>/dev/null
+      log_ok "NAS repo updated from GitHub"
     fi
 
-    # Summary
     echo ""
     log_step "Deploy Summary"
     log_ok "Files deployed: ${#SYNC_FILES[@]}"
     log_ok "Container: ${CONTAINER} (healthy)"
+    log_ok "NAS repo: ${NAS_REPO_DIR}"
     if [[ $DEPLOY_PUSH -eq 1 ]]; then
       log_ok "GitHub: synced"
     fi
@@ -641,7 +627,6 @@ case "$MODE" in
     ;;
 
   check|sync)
-    # --- Sync mode: container → GitHub ---
     log_step "Cloning GitHub repo"
 
     CLONE_DIR="${WORK_DIR}/wiki-kb"
@@ -660,12 +645,19 @@ case "$MODE" in
     do_commit_push "$CLONE_DIR"
     do_post_push_verify "$CLONE_DIR" "$SAFE_FILTER"
 
-    # Summary
+    # Sync NAS repo with GitHub after push
+    if [[ $DRIFT_COUNT -gt 0 ]]; then
+      $SSH_CMD "cd ${NAS_REPO_DIR} && git fetch origin main && git reset --hard origin/main" 2>/dev/null
+      sync_nas_repo_to_deploy
+      log_ok "NAS repo synced from GitHub"
+    fi
+
     echo ""
     log_step "Summary"
     log_ok "Files synced: ${DRIFT_COUNT}"
     log_ok "Commit: $(git -C "$CLONE_DIR" rev-parse --short HEAD)"
     log_ok "Message: ${COMMIT_MSG:-no changes}"
+    log_ok "NAS repo: ${NAS_REPO_DIR}"
     echo ""
     ;;
 
