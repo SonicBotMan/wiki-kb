@@ -24,6 +24,7 @@ import os
 import re
 import sys
 import time
+import yaml
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -344,9 +345,19 @@ def create_wiki_page(entity: dict, existing_pages: dict) -> Optional[str]:
     name = entity.get("name", "unnamed")
     description = entity.get("description", "")
 
+    # SEC-1: Sanitize inputs to prevent YAML injection
+    name = name.replace("\n", " ").replace("\r", " ").strip()
+    entity_type = entity_type.replace("\n", " ").replace("\r", " ").strip()
+    description = description.replace("\n", " ").replace("\r", " ").strip()
+
     # Generate slug
     slug = re.sub(r"[^\w\u4e00-\u9fff-]", "-", name.lower())
     slug = re.sub(r"-+", "-", slug).strip("-")
+
+    # SEC-2: Empty slug guard
+    if not slug:
+        print("  ⚠ Cannot create page: empty slug")
+        return None
 
     # Determine directory using module-level TYPE_DIR_MAP
     dir_path = TYPE_DIR_MAP.get(entity_type, CONCEPTS_DIR)
@@ -357,15 +368,19 @@ def create_wiki_page(entity: dict, existing_pages: dict) -> Optional[str]:
         return slug
 
     today = datetime.now().strftime("%Y-%m-%d")
+    # SEC-1: Build frontmatter safely with yaml.dump (prevents YAML injection)
+    fm_dict = {
+        "title": name,
+        "created": today,
+        "updated": today,
+        "type": entity_type,
+        "tags": [],
+        "sources": ["openviking-memory"],
+        "status": "draft",
+    }
+    fm_yaml = yaml.dump(fm_dict, default_flow_style=None, allow_unicode=True, sort_keys=False).rstrip("\n")
     content = f"""---
-title: {name}
-created: {today}
-updated: {today}
-type: {entity_type}
-tags: []
-sources: [openviking-memory]
-status: draft
----
+{fm_yaml}---
 
 # {name}
 

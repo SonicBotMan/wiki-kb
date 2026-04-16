@@ -495,6 +495,9 @@ def wiki_create(name: str, type: str, description: str, content: str = "", statu
 
     subdir = TYPE_DIR_MAP.get(type.lower(), "concepts")
     slug = _slugify(name)
+    # SEC-2: Empty slug guard
+    if not slug:
+        raise ValueError("Cannot create page: name produced an empty slug")
     page_path = WIKI_ROOT / subdir / f"{slug}.md"
 
     if page_path.exists():
@@ -592,6 +595,9 @@ def wiki_update(page_id: str, section: str, content: str) -> Dict:
     Timeline is append-only — use wiki_append_timeline() instead.
     Returns {page_path, updated_sections}
     """
+    MAX_SECTION_CONTENT = 500_000
+    if len(content) > MAX_SECTION_CONTENT:
+        raise ValueError(f"Section content exceeds maximum allowed size ({MAX_SECTION_CONTENT} chars)")
     path = _resolve_page_path(page_id)
     if not path:
         raise ValueError(f"Page not found: {page_id}")
@@ -646,6 +652,9 @@ def wiki_append_timeline(page_id: str, event: str, source: str = "") -> Dict:
     更新 frontmatter updated 日期。
     返回 {page_path, timeline_entry}
     """
+    MAX_TIMELINE_EVENT = 10_000
+    if len(event) > MAX_TIMELINE_EVENT:
+        raise ValueError(f"Timeline event exceeds maximum allowed size ({MAX_TIMELINE_EVENT} chars)")
     path = _resolve_page_path(page_id)
     if not path:
         raise ValueError(f"Page not found: {page_id}")
@@ -930,7 +939,10 @@ def wiki_health() -> Dict:
     # 4. Disk space
     try:
         stat = os.statvfs(str(WIKI_ROOT))
-        free_pct = (stat.f_bavail / stat.f_blocks) * 100
+        if stat.f_blocks > 0:
+            free_pct = (stat.f_bavail / stat.f_blocks) * 100
+        else:
+            free_pct = 0
         if free_pct < 10:
             checks.append({"name": "disk_space", "status": "warning",
                            "message": f"Low disk space: {free_pct:.1f}% available"})

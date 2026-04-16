@@ -552,7 +552,7 @@ def add_alias(entity_id: str, alias: str) -> bool:
     entity = reg["entities"][entity_id]
     
     if norm not in entity.get("aliases", []):
-        entity.setdefault("aliases", []).append(alias)
+        entity.setdefault("aliases", []).append(norm)
     
     reg["alias_index"][norm] = entity_id
     entity["updated"] = datetime.now().strftime("%Y-%m-%d")

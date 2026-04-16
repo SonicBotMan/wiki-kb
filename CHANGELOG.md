@@ -1,3 +1,20 @@
+## v1.3.1 (2026-04-16)
+
+### Security
+- **SEC-1**: `memory_to_wiki.py` YAML injection — `create_wiki_page` now uses `yaml.dump()` for frontmatter instead of f-string concatenation. All user-controlled fields (name, type, description) sanitized with newline/carriage-return removal before use.
+- **SEC-2**: Empty slug DoS — `wiki_create` raises `ValueError` when `_slugify()` produces empty string; `create_wiki_page` returns `None` and skips page creation.
+- **MINOR-2**: `wiki-backup.sh` exclude `.env` and `.env.*` from tar archives to prevent API key leakage.
+
+### Data Integrity
+- **DATA-1**: `entity_registry.add_alias` now stores normalized alias values in both `aliases` list and `alias_index` (was storing raw value in aliases list).
+
+### Reliability
+- **DATA-2**: `wiki_update` rejects section content >500KB; `wiki_append_timeline` rejects events >10KB to prevent unbounded wiki file growth.
+- **MINOR-1**: `wiki_health` disk space check guards against `ZeroDivisionError` on filesystems where `f_blocks==0` (tmpfs, memory disks).
+
+### Tests
+- All 35 tests passing in container (`PYTHONPATH=/app/scripts python3 -m pytest tests/`).
+
 ## v1.3.0 (2026-04-16)
 
 ### Security

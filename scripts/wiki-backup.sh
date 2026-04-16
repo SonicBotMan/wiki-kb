@@ -103,6 +103,8 @@ EXCLUDES=(
     --exclude='.DS_Store'
     --exclude='node_modules'
     --exclude='*.tmp'
+    --exclude='.env'
+    --exclude='.env.*'
 )
 
 echo "=== Wiki Backup ==="
