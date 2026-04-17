@@ -334,29 +334,41 @@ def _openviking_search(query: str, type_filter: str = "") -> List[Dict]:
             items = []
             for r in (result.get("result", {}).get("resources") or []):
                 uri = r.get("uri", "")
-                # 从 URI 提取 title: viking://resources/<name>/<file>
+                # 从 URI 提取 slug 和 title
+                # URI format: viking://resources/<slug>/<subpath>.md
+                # 或: viking://resources/<prefix>/.../<slug>.md/<nested>/...
+                # parts[0]=viking: parts[1]= (empty) parts[2]=resources ...
+                # slug 是第一个 .md 组件（去掉 .md 后缀）
                 parts = uri.rstrip("/").split("/")
-                title = parts[-2] if len(parts) >= 2 else parts[-1]
-                title = title.replace("_", " ")
+                slug = ""
+                for p in parts[3:]:  # 跳过 viking:, 空, resources
+                    if p.endswith(".md"):
+                        slug = p[:-3]  # 去掉 .md 后缀
+                        break
+                if not slug:
+                    slug = parts[-1] if len(parts) >= 2 else parts[-1]
+                title = slug.replace("_", " ")
+                # Resolve page_path by matching local files for this slug
+                resolved_path = ""
+                resolved_type = ""
+                file_slug = _slugify(slug)
+                for _sdir in sorted(ALLOWED_SUBDIRS):
+                    candidate = WIKI_ROOT / _sdir / f"{file_slug}.md"
+                    if candidate.exists():
+                        try:
+                            _c = candidate.read_text(encoding="utf-8")
+                            _fm, _ = _get_frontmatter(_c)
+                            resolved_path = str(candidate.relative_to(WIKI_ROOT))
+                            resolved_type = _fm.get("type", "")
+                        except Exception:
+                            pass
+                        break
                 items.append({
                     "title": title,
-                    "type": "",
-                    "page_path": "",
+                    "type": resolved_type,
+                    "page_path": resolved_path,
                     "summary": r.get("abstract", ""),
                 })
-            # Resolve page_path from title by matching local files
-            slug = _slugify(title)
-            for _sdir in sorted(ALLOWED_SUBDIRS):
-                candidate = WIKI_ROOT / _sdir / f"{slug}.md"
-                if candidate.exists():
-                    try:
-                        _c = candidate.read_text(encoding="utf-8")
-                        _fm, _ = _get_frontmatter(_c)
-                        items[-1]["page_path"] = str(candidate.relative_to(WIKI_ROOT))
-                        items[-1]["type"] = _fm.get("type", "")
-                    except Exception:
-                        pass
-                    break
 
             _logger.info("openviking_search: query=%r type=%r → %d results", query, type_filter, len(items))
             # Deduplicate: prefer page_path, fallback to title
@@ -379,7 +391,6 @@ def _openviking_search(query: str, type_filter: str = "") -> List[Dict]:
         _logger.warning("openviking_search: query=%r → fallback (%s: %s)", query, type(e).__name__, e)
         # 如果 OpenViking 不可用，fallback 到文件搜索
         return _fallback_file_search(query, type_filter)
-
 
 def _fallback_file_search(query: str, type_filter: str = "") -> List[Dict]:
     """当 OpenViking 不可用时，使用文件搜索 fallback"""
