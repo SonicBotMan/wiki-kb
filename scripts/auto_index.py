@@ -67,6 +67,15 @@ IDEAS_DIR = WIKI_ROOT / "ideas"
 COMPARISONS_DIR = WIKI_ROOT / "comparisons"
 QUERIES_DIR = WIKI_ROOT / "queries"
 TOOLS_DIR = WIKI_ROOT / "tools"
+INDEX_FILE = WIKI_ROOT / "index.md"
+LOG_FILE = WIKI_ROOT / "log.md"
+SCHEMA_TYPES = {"entity", "concept", "comparison", "query", "person", "project", "meeting", "idea", "tool"}
+TYPE_ORDER = ["entities", "concepts", "people", "projects", "meetings", "ideas", "tools", "comparisons", "queries"]
+TYPE_LABELS = {
+    "entities": "Entities", "concepts": "Concepts", "people": "People",
+    "projects": "Projects", "meetings": "Meetings", "ideas": "Ideas",
+    "tools": "Tools", "comparisons": "Comparisons", "queries": "Queries",
+}
 GRAPH_FILE = WIKI_ROOT / "graph.json"
 STATE_FILE = WIKI_ROOT / ".auto_index_state.json"
 # OpenViking config (REST API — no CLI needed)
@@ -184,6 +193,118 @@ def detect_changes(force: bool = False) -> tuple[list[Path], list[Path], list[Pa
                 deleted_files.append(Path(filepath))
 
     return new_files, modified_files, deleted_files
+
+
+# ============ Index Generation ============
+
+def generate_index() -> int:
+    """Regenerate index.md from all wiki pages. Returns total page count."""
+    from datetime import datetime as _dt
+    import collections as _col
+
+    pages = _col.defaultdict(list)
+    all_subdirs = [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR,
+                   MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR]
+
+    for subdir in all_subdirs:
+        if not subdir.exists():
+            continue
+        type_key = subdir.name  # e.g. "concepts"
+        for md_file in sorted(subdir.glob("*.md")):
+            name = md_file.stem
+            desc = ""
+            try:
+                content = md_file.read_text(encoding="utf-8")
+                fm = parse_frontmatter(content)
+                desc = fm.get("description", "") or fm.get("title", "") or ""
+            except Exception:
+                pass
+            if not desc:
+                # Extract first meaningful line from body
+                try:
+                    content = md_file.read_text(encoding="utf-8", errors="replace")[:3000]
+                    body = re.sub(r"^---\s*\n.*?\n---", "", content, count=1, flags=re.DOTALL).strip()
+                    for line in body.split("\n"):
+                        line = line.strip()
+                        if line and not line.startswith("#") and not line.startswith(">") and not line.startswith("-"):
+                            desc = line[:150]
+                            break
+                except Exception:
+                    pass
+            pages[type_key].append((name, desc))
+
+    total = sum(len(v) for v in pages.values())
+    lines = [
+        "# Wiki Index\n\n",
+        f"> Content catalog. Every wiki page listed under its type with a one-line summary.\n",
+        f"> Read this first to find relevant pages for any query.\n",
+        f"> Last updated: {_dt.now().strftime('%Y-%m-%d')} | Total pages: {total}\n\n",
+    ]
+
+    for type_key in TYPE_ORDER:
+        entries = pages.get(type_key, [])
+        if not entries:
+            continue
+        label = TYPE_LABELS.get(type_key, type_key.capitalize())
+        lines.append(f"## {label}\n\n")
+        lines.append("<!-- Alphabetical within section -->\n\n")
+        for name, desc in sorted(entries, key=lambda x: x[0].lower()):
+            if desc:
+                lines.append(f"- [[{name}]] — {desc}\n")
+            else:
+                lines.append(f"- [[{name}]]\n")
+        lines.append("\n")
+
+    INDEX_FILE.write_text("".join(lines), encoding="utf-8")
+    _logger.info("Index regenerated: %d pages", total)
+    return total
+
+
+# ============ Schema Consistency Check ============
+
+def check_schema_consistency() -> list:
+    """Check all wiki pages for schema violations. Returns list of issues."""
+    issues = []
+    all_subdirs = [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR,
+                   MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR]
+
+    for subdir in all_subdirs:
+        if not subdir.exists():
+            continue
+        for md_file in sorted(subdir.glob("*.md")):
+            rel = f"{subdir.name}/{md_file.name}"
+            try:
+                content = md_file.read_text(encoding="utf-8")
+                fm = parse_frontmatter(content)
+            except Exception:
+                issues.append(f"YAML_ERROR: {rel}")
+                continue
+
+            t = fm.get("type")
+            if t and t not in SCHEMA_TYPES:
+                issues.append(f"BAD_TYPE({t}): {rel}")
+
+            for field in ("title", "created", "type", "tags", "sources", "status"):
+                if field not in fm:
+                    issues.append(f"NO_{field.upper()}: {rel}")
+
+            if "description" not in fm:
+                issues.append(f"NO_DESCRIPTION: {rel}")
+
+    return issues
+
+
+def append_log(message: str):
+    """Append a timestamped entry to log.md."""
+    from datetime import datetime as _dt
+    timestamp = _dt.now().strftime("%Y-%m-%d %H:%M")
+    entry = f"\n## [{timestamp}] auto_index\n{message}\n"
+    if LOG_FILE.exists():
+        existing = LOG_FILE.read_text(encoding="utf-8")
+        LOG_FILE.write_text(existing + entry, encoding="utf-8")
+    else:
+        LOG_FILE.write_text(f"# Wiki Change Log\n{entry}", encoding="utf-8")
+    _logger.info("Log updated: %s", message[:80])
 
 
 # ============ Graph Generation ============
@@ -455,6 +576,11 @@ def main():
           f"{graph['metadata']['edge_count']} edges → {GRAPH_FILE}")
     _logger.info("Graph: %d nodes, %d edges", graph['metadata']['node_count'], graph['metadata']['edge_count'])
 
+    # Always regenerate index.md
+    print("📖 Regenerating index.md...")
+    page_count = generate_index()
+    print(f"   ✓ {page_count} pages → index.md")
+
     # Sync to OpenViking if requested
     changed_files = pages_new + pages_modified
     sync_ok = True
@@ -465,6 +591,34 @@ def main():
     elif do_sync and not changed_files and not force:
         print("\n✅ No files to sync")
         _logger.info("No files to sync")
+
+    # Schema consistency check
+    if total_changes > 0 or force:
+        print("🔍 Checking schema consistency...")
+        issues = check_schema_consistency()
+        if issues:
+            warnings = [i for i in issues if not i.startswith("NO_DESCRIPTION") and not i.startswith("NO_HASH")]
+            desc_missing = sum(1 for i in issues if i.startswith("NO_DESCRIPTION"))
+            print(f"   ⚠ {len(issues)} issues ({len(warnings)} warnings, {desc_missing} missing descriptions)")
+            if warnings:
+                for w in warnings[:10]:
+                    print(f"     - {w}")
+                if len(warnings) > 10:
+                    print(f"     ... and {len(warnings) - 10} more")
+            _logger.info("Schema check: %d issues", len(issues))
+        else:
+            print("   ✓ All pages pass schema check")
+
+        # Append to log.md
+        if pages_new:
+            new_names = [p.stem for p in pages_new]
+            append_log(f"- New pages: {len(pages_new)}\n" + "\n".join(f"  - {n}" for n in new_names))
+        if pages_modified:
+            mod_names = [p.stem for p in pages_modified]
+            append_log(f"- Modified pages: {len(pages_modified)}\n" + "\n".join(f"  - {n}" for n in mod_names))
+        if pages_deleted:
+            del_names = [p.stem for p in pages_deleted]
+            append_log(f"- Deleted pages: {len(pages_deleted)}\n" + "\n".join(f"  - {n}" for n in del_names))
 
     # Update state (only if sync succeeded or no sync requested)
     if sync_ok:
