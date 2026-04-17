@@ -67,14 +67,20 @@ IDEAS_DIR = WIKI_ROOT / "ideas"
 COMPARISONS_DIR = WIKI_ROOT / "comparisons"
 QUERIES_DIR = WIKI_ROOT / "queries"
 TOOLS_DIR = WIKI_ROOT / "tools"
+RAW_DIR = WIKI_ROOT / "raw"
+SRC_ARTICLES_DIR = WIKI_ROOT / "src" / "articles"
+DREAM_REPORTS_DIR = WIKI_ROOT / "dream-reports"
+AUX_DIRS = [RAW_DIR, SRC_ARTICLES_DIR, DREAM_REPORTS_DIR]
+SKIP_INDEX_DIRS = {"raw", "src", "dream-reports"}  # these go into index but in a separate section
 INDEX_FILE = WIKI_ROOT / "index.md"
 LOG_FILE = WIKI_ROOT / "log.md"
 SCHEMA_TYPES = {"entity", "concept", "comparison", "query", "person", "project", "meeting", "idea", "tool", "guide", "meta"}
-TYPE_ORDER = ["entities", "concepts", "people", "projects", "meetings", "ideas", "tools", "comparisons", "queries"]
+TYPE_ORDER = ["entities", "concepts", "tools", "people", "projects", "meetings", "ideas", "comparisons", "queries", "dream-reports", "raw", "src/articles"]
 TYPE_LABELS = {
     "entities": "Entities", "concepts": "Concepts", "people": "People",
     "projects": "Projects", "meetings": "Meetings", "ideas": "Ideas",
     "tools": "Tools", "comparisons": "Comparisons", "queries": "Queries",
+    "dream-reports": "Dream Reports", "raw": "Raw Materials", "src/articles": "Saved Articles",
 }
 GRAPH_FILE = WIKI_ROOT / "graph.json"
 STATE_FILE = WIKI_ROOT / ".auto_index_state.json"
@@ -167,7 +173,7 @@ def detect_changes(force: bool = False) -> tuple[list[Path], list[Path], list[Pa
     state = load_state()
     current_files = {}
 
-    for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR]:
+    for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR] + AUX_DIRS:
         if not subdir.exists():
             continue
         for md_file in subdir.glob("*.md"):
@@ -204,7 +210,7 @@ def generate_index() -> int:
 
     pages = _col.defaultdict(list)
     all_subdirs = [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR,
-                   MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR]
+                   MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR] + AUX_DIRS
 
     for subdir in all_subdirs:
         if not subdir.exists():
@@ -266,13 +272,14 @@ def check_schema_consistency() -> list:
     """Check all wiki pages for schema violations. Returns list of issues."""
     issues = []
     all_subdirs = [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR,
-                   MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR]
+                   MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR] + AUX_DIRS
 
     for subdir in all_subdirs:
         if not subdir.exists():
             continue
         for md_file in sorted(subdir.glob("*.md")):
-            rel = f"{subdir.name}/{md_file.name}"
+            # Use relative path from wiki root for aux dirs
+            rel = str(md_file.relative_to(WIKI_ROOT))
             try:
                 content = md_file.read_text(encoding="utf-8")
                 fm = parse_frontmatter(content)
@@ -284,7 +291,14 @@ def check_schema_consistency() -> list:
             if t and t not in SCHEMA_TYPES:
                 issues.append(f"BAD_TYPE({t}): {rel}")
 
-            for field in ("title", "created", "type", "tags", "sources", "status"):
+            # Relaxed requirements for auxiliary dirs (raw articles, saved pages, reports)
+            is_aux = rel.startswith("raw/") or rel.startswith("src/") or rel.startswith("dream-reports/")
+            if is_aux:
+                required = ("title", "type")
+            else:
+                required = ("title", "created", "type", "tags", "sources", "status")
+
+            for field in required:
                 if field not in fm:
                     issues.append(f"NO_{field.upper()}: {rel}")
 
@@ -315,7 +329,7 @@ def generate_graph() -> dict:
     edges = []
     all_page_ids = set()
 
-    for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR]:
+    for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR] + AUX_DIRS:
         if not subdir.exists():
             continue
         for md_file in subdir.glob("*.md"):
@@ -592,24 +606,24 @@ def main():
         print("\n✅ No files to sync")
         _logger.info("No files to sync")
 
-    # Schema consistency check
-    if total_changes > 0 or force:
-        print("🔍 Checking schema consistency...")
-        issues = check_schema_consistency()
-        if issues:
-            warnings = [i for i in issues if not i.startswith("NO_DESCRIPTION") and not i.startswith("NO_HASH")]
-            desc_missing = sum(1 for i in issues if i.startswith("NO_DESCRIPTION"))
-            print(f"   ⚠ {len(issues)} issues ({len(warnings)} warnings, {desc_missing} missing descriptions)")
-            if warnings:
-                for w in warnings[:10]:
-                    print(f"     - {w}")
-                if len(warnings) > 10:
-                    print(f"     ... and {len(warnings) - 10} more")
-            _logger.info("Schema check: %d issues", len(issues))
-        else:
-            print("   ✓ All pages pass schema check")
+    # Schema consistency check — ALWAYS runs
+    print("🔍 Checking schema consistency...")
+    issues = check_schema_consistency()
+    if issues:
+        warnings = [i for i in issues if not i.startswith("NO_DESCRIPTION") and not i.startswith("NO_HASH")]
+        desc_missing = sum(1 for i in issues if i.startswith("NO_DESCRIPTION"))
+        print(f"   ⚠ {len(issues)} issues ({len(warnings)} warnings, {desc_missing} missing descriptions)")
+        if warnings:
+            for w in warnings[:10]:
+                print(f"     - {w}")
+            if len(warnings) > 10:
+                print(f"     ... and {len(warnings) - 10} more")
+        _logger.info("Schema check: %d issues", len(issues))
+    else:
+        print("   ✓ All pages pass schema check")
 
-        # Append to log.md
+    # Append to log.md — only when there are changes
+    if total_changes > 0 or force:
         if pages_new:
             new_names = [p.stem for p in pages_new]
             append_log(f"- New pages: {len(pages_new)}\n" + "\n".join(f"  - {n}" for n in new_names))
@@ -623,7 +637,7 @@ def main():
     # Update state (only if sync succeeded or no sync requested)
     if sync_ok:
         state = load_state()
-        for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR]:
+        for subdir in [CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR, MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR] + AUX_DIRS:
             if not subdir.exists():
                 continue
             for md_file in subdir.glob("*.md"):
