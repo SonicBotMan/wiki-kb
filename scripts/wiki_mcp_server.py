@@ -14,6 +14,8 @@ import tempfile
 import fcntl
 from pathlib import Path
 from datetime import datetime
+import hashlib
+import subprocess
 
 # ============================================================
 # 0. 日志配置
@@ -97,6 +99,92 @@ _EXCLUDE_DIRS = {'dream-reports', 'raw', 'src', 'logs', 'scripts', '.git',
                  'assets', 'papers', 'transcripts', 'articles',
                  'images', 'pdfs', 'videos', 'audio'}
 
+# Rejection feedback storage
+_FEEDBACK_FILE = WIKI_ROOT / ".wiki_feedback.json"
+_GIT_COMMIT_PREFIX = "[wiki-brain]"
+
+
+def _load_feedback() -> dict:
+    """Load rejection feedback from JSON file."""
+    if not _FEEDBACK_FILE.exists():
+        return {}
+    try:
+        return json.loads(_FEEDBACK_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        _logger.warning("Failed to load feedback: %s", e)
+        return {}
+
+
+def _save_feedback(fb: dict):
+    """Save rejection feedback to JSON file."""
+    try:
+        _safe_write(_FEEDBACK_FILE, json.dumps(fb, ensure_ascii=False, indent=2))
+    except OSError as e:
+        _logger.error("Failed to save feedback: %s", e)
+
+
+def _store_rejection(page_id: str, feedback_text: str):
+    """Store a review rejection for future reference."""
+    fb = _load_feedback()
+    if page_id not in fb:
+        fb[page_id] = []
+    fb[page_id].append({
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "feedback": feedback_text,
+    })
+    fb[page_id] = fb[page_id][-5:]  # keep last 5
+    _save_feedback(fb)
+    _logger.info("Stored rejection feedback for %s", page_id)
+
+
+def _get_rejection_history(page_id: str) -> list:
+    """Get rejection history for a page (most recent first)."""
+    fb = _load_feedback()
+    return list(reversed(fb.get(page_id, [])))
+
+
+def _clear_rejection_history(page_id: str):
+    """Clear rejection history after successful review."""
+    fb = _load_feedback()
+    if page_id in fb:
+        del fb[page_id]
+        _save_feedback(fb)
+
+
+def _git_init():
+    """Initialize git repo in WIKI_ROOT if not already."""
+    if (WIKI_ROOT / ".git").exists():
+        return
+    _logger.info("Initializing git repo in %s", WIKI_ROOT)
+    subprocess.run(["git", "init"], cwd=str(WIKI_ROOT), capture_output=True, text=True)
+    subprocess.run(["git", "config", "user.email", "wiki-brain@hermes.local"], cwd=str(WIKI_ROOT), capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Wiki Brain"], cwd=str(WIKI_ROOT), capture_output=True)
+    (WIKI_ROOT / ".gitignore").write_text(
+        "logs/\n*.tmp\n*.lock\n__pycache__/\n.wiki_feedback.json\nregistry.json\n",
+        encoding="utf-8"
+    )
+    subprocess.run(["git", "add", "-A"], cwd=str(WIKI_ROOT), capture_output=True)
+    subprocess.run(["git", "commit", "-m", "[wiki-brain] init: initial commit"],
+                   cwd=str(WIKI_ROOT), capture_output=True, text=True)
+
+
+def _git_commit(message: str):
+    """Auto-commit changes with [wiki-brain] prefix. No-op if no changes."""
+    if not (WIKI_ROOT / ".git").exists():
+        return
+    try:
+        subprocess.run(["git", "add", "-A"], cwd=str(WIKI_ROOT),
+                       capture_output=True, text=True)
+        result = subprocess.run(
+            ["git", "commit", "-m", f"{_GIT_COMMIT_PREFIX} {message}"],
+            cwd=str(WIKI_ROOT), capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            _logger.info("Git commit: %s", message)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        _logger.warning("Git commit failed: %s", e)
+
+
 
 def _is_excluded(md_file) -> bool:
     """检查文件是否在排除目录中"""
@@ -144,6 +232,12 @@ def _safe_write(path: Path, content: str):
         except OSError:
             pass
         raise
+
+
+
+def _compute_body_hash(body: str) -> str:
+    """SHA256 of body content (first 16 hex chars). Detects manual edits."""
+    return hashlib.sha256(body.strip().encode('utf-8')).hexdigest()[:16]
 
 
 class _FileLock:
@@ -476,6 +570,8 @@ def wiki_get(page_id: str) -> Dict:
         "executive_summary": summary,
         "key_facts": key_facts,
         "relations": relations,
+            "content_hash": fm.get("content_hash", ""),
+            "rejection_history": _get_rejection_history(page_id),
         "timeline": timeline,
         "raw_body": body
     }
@@ -528,6 +624,7 @@ def wiki_create(name: str, type: str, description: str, content: str = "", statu
         "tags": [],
         "sources": [],
         "status": status,
+        "content_hash": "",
     }
     fm_yaml = yaml.dump(fm_dict, default_flow_style=None, allow_unicode=True, sort_keys=False).rstrip("\n")
 
@@ -563,7 +660,16 @@ def wiki_create(name: str, type: str, description: str, content: str = "", statu
     with _FileLock(page_path):
         if page_path.exists():
             raise ValueError(f"Page already exists: {page_path}")
+        # Compute content hash from the body portion
+        _, new_body = _get_frontmatter(page_content)
+        import yaml as _yaml_h
+        page_fm = _get_frontmatter(page_content)[0]
+        page_fm['content_hash'] = _compute_body_hash(new_body)
+        fm_yaml = _yaml_h.dump(page_fm, default_flow_style=None, allow_unicode=True, sort_keys=False).rstrip("\n")
+        body_part = page_content.split("\n---\n", 1)[1] if "\n---\n" in page_content else page_content
+        page_content = f'---\n{fm_yaml}\n---\n{body_part}'
         _safe_write(page_path, page_content)
+        _git_commit(f"create: {page_path.name}")
 
     # Entity registration: register if available, rollback on failure
     rel_path = str(page_path.relative_to(WIKI_ROOT))
@@ -640,19 +746,31 @@ def wiki_update(page_id: str, section: str, content: str) -> Dict:
         original = path.read_text(encoding='utf-8')
         fm, body = _get_frontmatter(original)
 
+        # Content hash check: detect manual edits since last agent write
+        stored_hash = fm.get("content_hash", "")
+        current_hash = _compute_body_hash(body)
+        hash_warning = None
+        if stored_hash and stored_hash != current_hash:
+            hash_warning = f"Content changed since last write (hash {stored_hash}->{current_hash}). Possible manual edit."
+            _logger.warning("%s: %s", str(path.relative_to(WIKI_ROOT)), hash_warning)
+
+
         body = _update_section(body, canonical_section, content)
 
+        fm['content_hash'] = _compute_body_hash(body)
         fm['updated'] = datetime.now().strftime("%Y-%m-%d")
         fm_lines = [f"{k}: {v}" for k, v in fm.items()]
         new_content = f"---\n" + "\n".join(fm_lines) + "\n---\n" + body
 
         _safe_write(path, new_content)
+        _git_commit(f"update {canonical_section}: {path.name}")
 
     rel_path = str(path.relative_to(WIKI_ROOT))
     return {
         "page_path": rel_path,
         "updated_sections": [canonical_section],
-        "section_content": content
+        "section_content": content,
+        "hash_warning": hash_warning,
     }
 
 @mcp.tool()
@@ -674,6 +792,14 @@ def wiki_append_timeline(page_id: str, event: str, source: str = "") -> Dict:
     with _FileLock(path):
         original = path.read_text(encoding='utf-8')
         fm, body = _get_frontmatter(original)
+
+        # Content hash check
+        stored_hash = fm.get("content_hash", "")
+        current_hash = _compute_body_hash(body)
+        if stored_hash and stored_hash != current_hash:
+            _logger.warning("%s: content changed since last write (hash %s->%s)",
+                str(path.relative_to(WIKI_ROOT)), stored_hash, current_hash)
+
 
         # 格式化 timeline 条目
         now = datetime.now().strftime("%Y-%m-%d")
@@ -711,6 +837,7 @@ def wiki_append_timeline(page_id: str, event: str, source: str = "") -> Dict:
         new_content = f"---\n" + "\n".join(fm_lines) + "\n---\n" + body
 
         _safe_write(path, new_content)
+        _git_commit(f"timeline: {path.name}")
 
 
     rel_path = str(path.relative_to(WIKI_ROOT))
@@ -1223,6 +1350,7 @@ def wiki_review(page_id: str) -> str:
 
     if result["passed"]:
 
+        _clear_rejection_history(page_id)
         _update_frontmatter_field(page_path, "status", "active")
 
         _append_timeline_entry(page_path, "Page reviewed and promoted to active", "wiki_review")
@@ -1236,6 +1364,7 @@ def wiki_review(page_id: str) -> str:
         })
 
     else:
+        _store_rejection(page_id, "; ".join(result["feedback"]))
 
         return json.dumps({
 
@@ -1339,6 +1468,54 @@ def _append_timeline_entry(page_path: Path, event: str, source: str = ""):
 
 # Entry point
 # ============================================================
+@mcp.tool()
+def wiki_undo(n: int = 1) -> str:
+    """Revert the last N [wiki-brain] git commits.
+    Only reverts commits with the [wiki-brain] prefix.
+    Returns a summary of what was undone."""
+    if not (WIKI_ROOT / ".git").exists():
+        return "Error: No git repository initialized."
+    if n < 1 or n > 20:
+        return "Error: n must be between 1 and 20."
+    log_result = subprocess.run(
+        ["git", "log", f"-{n}", "--oneline", "--grep=\[wiki-brain\]"],
+        cwd=str(WIKI_ROOT), capture_output=True, text=True
+    )
+    commits = [l.strip() for l in log_result.stdout.strip().split("\n") if l.strip()]
+    if not commits:
+        return "No [wiki-brain] commits to undo."
+    result = subprocess.run(
+        ["git", "revert", "--no-commit", f"HEAD~{len(commits)}..HEAD"],
+        cwd=str(WIKI_ROOT), capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        return f"Error reverting: {result.stderr.strip()}"
+    result2 = subprocess.run(
+        ["git", "commit", "-m", f"[wiki-brain] undo: revert last {len(commits)} commit(s)"],
+        cwd=str(WIKI_ROOT), capture_output=True, text=True
+    )
+    if result2.returncode != 0:
+        return f"Error committing revert: {result2.stderr.strip()}"
+    return f"Undone {len(commits)} commit(s):\n" + "\n".join(f"  - {c}" for c in commits)
+
+
+@mcp.tool()
+def wiki_log(limit: int = 10) -> str:
+    """Show recent [wiki-brain] git commit history.
+    Returns the last N commits with the [wiki-brain] prefix."""
+    if not (WIKI_ROOT / ".git").exists():
+        return "No git repository initialized."
+    result = subprocess.run(
+        ["git", "log", f"-{limit}", "--oneline", "--grep=\[wiki-brain\]"],
+        cwd=str(WIKI_ROOT), capture_output=True, text=True
+    )
+    commits = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]
+    if not commits:
+        return "No [wiki-brain] commits found."
+    return "Recent wiki changes:\n" + "\n".join(f"  {c}" for c in commits)
+
+
+
 if __name__ == "__main__":
     _mcp_port = int(os.environ.get("MCP_PORT", "8764"))
     _mcp_api_key = os.environ.get("MCP_API_KEY", "")
@@ -1374,6 +1551,7 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, _shutdown)
     signal.signal(signal.SIGINT, _shutdown)
 
+    _git_init()
     _logger.info("Wiki Brain MCP Server starting (WIKI_ROOT=%s, port=%s)", WIKI_ROOT, _mcp_port)
 
     _app = mcp.streamable_http_app()
