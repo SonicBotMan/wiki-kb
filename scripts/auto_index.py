@@ -69,7 +69,7 @@ QUERIES_DIR = WIKI_ROOT / "queries"
 TOOLS_DIR = WIKI_ROOT / "tools"
 INDEX_FILE = WIKI_ROOT / "index.md"
 LOG_FILE = WIKI_ROOT / "log.md"
-SCHEMA_TYPES = {"entity", "concept", "comparison", "query", "person", "project", "meeting", "idea", "tool"}
+SCHEMA_TYPES = {"entity", "concept", "comparison", "query", "person", "project", "meeting", "idea", "tool", "guide", "meta"}
 TYPE_ORDER = ["entities", "concepts", "people", "projects", "meetings", "ideas", "tools", "comparisons", "queries"]
 TYPE_LABELS = {
     "entities": "Entities", "concepts": "Concepts", "people": "People",
