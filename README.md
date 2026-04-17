@@ -99,6 +99,9 @@ Each step is optional. Nothing blocks you from starting.
 - 🤖 **Automation Pipeline** — Dream Cycle (LLM audit), Auto Index (knowledge graph), Memory Sync (conversation → Wiki)
 - 🐳 **Docker Deployment** — Single container, low resource usage (512MB / 0.5 CPU)
 - 📂 **Pure File Storage** — All data is Markdown files, editable with any editor, Git-friendly
+- 🔒 **Content Hash Protection** — SHA256 hash detects manual edits, prevents silent agent overwrites
+- 🔄 **Rejection Feedback Loop** — Review failures are stored and surfaced to agents on next attempt
+- 🔧 **Git Safety Net** — Every write auto-commits, `wiki_undo` reverts, full change history via `wiki_log`
 
 ## Architecture Overview
 
@@ -212,20 +215,22 @@ wiki-kb/
 
 ## MCP Tools
 
-Wiki KB exposes 13 MCP tools:
+Wiki KB exposes 15 MCP tools:
 
-### Wiki Operations (8)
+### Wiki Operations (10)
 
 | Tool | Description |
 |------|-------------|
 | `wiki_search` | Semantic search across wiki pages (supports type filtering) |
-| `wiki_get` | Read full page content (returns structured sections) |
-| `wiki_create` | Create new page (auto-routes directory + registers entity) |
-| `wiki_update` | Update specific section (executive_summary / key_facts / relations) |
-| `wiki_append_timeline` | Append Timeline entry (auto-formatted + date updated) |
+| `wiki_get` | Read full page content (returns structured sections + content_hash + rejection_history) |
+| `wiki_create` | Create new page (auto-routes directory + registers entity + computes content hash) |
+| `wiki_update` | Update specific section (detects manual edits via content hash) |
+| `wiki_append_timeline` | Append Timeline entry (auto-formatted + date updated + hash check) |
 | `wiki_list` | List pages (supports type / status filtering) |
 | `wiki_health` | Health check (registry integrity, disk, OpenViking connectivity) |
-| `wiki_stats` | Statistics + OpenViking connection status |
+| `wiki_review` | AI-assisted quality review (stores rejection feedback on failure) |
+| `wiki_undo` | Revert last N `[wiki-brain]` git commits |
+| `wiki_log` | Show recent `[wiki-brain]` git commit history |
 
 ### Entity Registry (4)
 
@@ -241,6 +246,8 @@ Wiki KB exposes 13 MCP tools:
 | Tool | Description |
 |------|-------------|
 | `wiki_stats` | Returns statistics + OpenViking connectivity status |
+
+> **Total**: 15 tools (10 Wiki + 4 Entity + 1 System)
 
 ### Usage in Agents
 
@@ -739,6 +746,24 @@ If Wiki KB and the client are on different machines, ensure the port binds to `0
 2. `POST /api/v1/resources` — add to OpenViking
 
 Ensure `OPENVIKING_API_KEY`, `OPENVIKING_ACCOUNT`, and `OPENVIKING_USER` are configured correctly.
+
+### How to Undo a Mistaken Wiki Change
+
+Every write operation (create/update/timeline) is automatically committed to Git with a `[wiki-brain]` prefix.
+
+```python
+# Revert last change
+wiki_undo(n=1)
+
+# View change history
+wiki_log(limit=10)
+```
+
+The Git repo is initialized automatically on first startup in `WIKI_ROOT`. Only `[wiki-brain]` prefixed commits are affected by `wiki_undo` — user's own commits are safe.
+
+### Content Hash Warning
+
+If `wiki_update` returns a `hash_warning`, it means the page was manually edited since the last agent write. The agent can decide whether to proceed or preserve the manual changes.
 
 ## License
 
