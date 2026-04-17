@@ -619,7 +619,7 @@ def wiki_create(name: str, type: str, description: str, content: str = "", statu
     fm_dict = {
         "title": name,
         "created": now,
-        "updated": now,
+        "last_modified": now,
         "type": type,
         "tags": [],
         "sources": [],
