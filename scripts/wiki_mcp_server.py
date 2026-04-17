@@ -624,6 +624,7 @@ def wiki_create(name: str, type: str, description: str, content: str = "", statu
         "tags": [],
         "sources": [],
         "status": status,
+        "description": description,
         "content_hash": "",
     }
     fm_yaml = yaml.dump(fm_dict, default_flow_style=None, allow_unicode=True, sort_keys=False).rstrip("\n")
@@ -702,6 +703,7 @@ def wiki_create(name: str, type: str, description: str, content: str = "", statu
         "page_path": rel_path,
         "entity_id": entity_id,
         "status": status,
+        "description": description,
         "title": name,
         "type": type
     }
