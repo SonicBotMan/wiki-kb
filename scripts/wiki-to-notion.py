@@ -85,6 +85,7 @@ TYPE_TO_DB = {
     "person": os.environ.get("NOTION_DB_PERSON", ""),
     "meeting": os.environ.get("NOTION_DB_MEETING", ""),
     "idea": os.environ.get("NOTION_DB_IDEA", ""),
+    "guide": os.environ.get("NOTION_DB_GUIDE", ""),
 }
 
 # Wiki subdirectory → type name mapping (used for routing pages to databases)
@@ -568,7 +569,7 @@ def sync_page(page_path, db_id, dry_run=False):
     # Build properties
     properties = {
         "Name": {"title": [{"type": "text", "text": {"content": title[:100]}}]},
-        "Tags": {"multi_select": [{"name": t} for t in tags]},
+        "Tags": {"multi_select": [{"name": t} for t in (tags or [])]},
         "Wiki File": {"rich_text": [{"type": "text", "text": {"content": wiki_file}}]},
         "Content Hash": {"rich_text": [{"type": "text", "text": {"content": content_hash}}]},
     }
@@ -671,7 +672,7 @@ def update_page(page_path, notion_page_id, db_id, dry_run=False):
     # Step 4: Update properties LAST
     properties = {
         "Name": {"title": [{"type": "text", "text": {"content": title[:100]}}]},
-        "Tags": {"multi_select": [{"name": t} for t in tags]},
+        "Tags": {"multi_select": [{"name": t} for t in (tags or [])]},
         "Content Hash": {"rich_text": [{"type": "text", "text": {"content": content_hash}}]},
     }
     created = fm.get("created", "")

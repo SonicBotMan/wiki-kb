@@ -14,15 +14,9 @@ import yaml
 
 # Maps entity types → wiki subdirectory names
 TYPE_DIR_MAP = {
-    "person": "people",
-    "project": "projects",
-    "entity": "entities",
     "concept": "concepts",
-    "meeting": "meetings",
-    "idea": "ideas",
-    "comparison": "comparisons",
-    "query": "queries",
-    "tool": "tools",
+    "entity": "entities",
+    "person": "people",
 }
 
 # Set of all valid wiki subdirectory names

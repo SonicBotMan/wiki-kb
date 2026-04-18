@@ -464,12 +464,16 @@ def _openviking_search(query: str, type_filter: str = "") -> List[Dict]:
                     "summary": r.get("abstract", ""),
                 })
 
-            _logger.info("openviking_search: query=%r type=%r → %d results", query, type_filter, len(items))
-            # Deduplicate: prefer page_path, fallback to title
+            # Filter: only keep results that resolved to a local page
+            valid = [i for i in items if i.get("page_path")]
+            _logger.info("openviking_search: query=%r type=%r -> %d/%d resolved", query, type_filter, len(valid), len(items))
+            if not valid:
+                return _fallback_file_search(query, type_filter)
+            # Deduplicate by page_path
             seen = set()
             unique = []
-            for item in items:
-                key = item.get("page_path") or item.get("title", "")
+            for item in valid:
+                key = item.get("page_path", "")
                 if key and key in seen:
                     continue
                 if key:
