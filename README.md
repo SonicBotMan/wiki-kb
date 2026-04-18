@@ -1,423 +1,344 @@
 # Wiki Knowledge Base
 
-> **Agent writes, human reads** — A structured knowledge base that AI agents maintain autonomously via MCP.
+**Knowledge that compounds.** A structured knowledge system where AI agents actively maintain, improve, and compound understanding over time — not just retrieve it.
 
-Wiki KB is a structured knowledge base built on pure Markdown files, exposing operations via [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) so that AI agents (Claude, GPT, GLM, etc.) can **actively read and write** knowledge during conversations.
+---
 
-## Why Wiki KB?
+## The Problem We're Solving
 
-### The Problem
+Every AI application hits the same wall: **knowledge doesn't accumulate.**
 
-| Approach | Problem |
-|----------|---------|
-| **Notion / Confluence** | AI can only "read", never "write". Data locked in proprietary platforms. |
-| **Obsidian / Logseq** | Humans can edit, but AI cannot proactively write during conversations. |
-| **RAG (Vector DBs)** | Retrieval only — no knowledge accumulation. Knowledge lost when conversation ends. |
-| **Dify / Coze / LangChain** | Tied to specific frameworks and LLMs. Knowledge structure dictated by tool's data model. |
+RAG retrieves the same documents every time. Chat history gets compressed and forgotten. The agent answers the same question differently each session. Nothing compounds.
 
-### Core Philosophy
+Karpathy named this in April 2026: *"LLMs re-derive knowledge from scratch on every query. There's no accumulation."* His LLM Wiki proposed a shift — **compile knowledge at write-time, not retrieve at query-time** — and his GitHub Gist got 14,000 stars in a week.
 
-**Agent writes, human reads.**
+Garry Tan built [gbrain](https://github.com/garrytan/gbrain) around the same insight: every entity gets a Markdown file with a **compiled truth** (current best understanding) on top and an **append-only timeline** (evidence chain) on the bottom. When truth and evidence conflict, evidence wins. Structure defeats hallucination.
 
-Most knowledge management systems assume humans are knowledge producers and AI is a consumer. Wiki KB inverts this — **AI agents are the day-to-day maintainers**, and humans only review and edit when needed.
+We started from these ideas. Then we spent three months running a production knowledge base — 58 pages created, automated scripts built, schema versions iterated — and learned what actually works and what doesn't.
 
-- You mention a new project → Agent automatically creates a wiki page
-- You correct a fact → Agent immediately updates the page + logs it in the Timeline
-- A valuable decision emerges from discussion → Agent extracts and archives it automatically
-- **You never manually "take notes"** — knowledge maintenance cost approaches zero
+**This project is what we learned.**
 
-### Unique Design
+---
 
-**1. Compiled Truth + Timeline — Solving AI Hallucination**
+## What Makes Wiki KB Different
 
-Every Wiki KB page has two layers:
-- **Upper layer (Compiled Truth)**: Current best understanding. Rewritten as a whole when new information arrives.
-- **Lower layer (Timeline)**: Append-only evidence chain. Each entry is timestamped and sourced, never modified.
+### 1. Born from Production, Not Theory
 
-When the upper conclusion contradicts the lower evidence, **Timeline takes precedence**. This fundamentally solves the trustworthiness problem of AI-generated content — not through "better prompts", but through structural constraints.
+Most knowledge management projects are designed first, deployed never. We ran Wiki KB in production for months with a real AI agent (Hermes) maintaining knowledge from daily conversations, research sessions, and project work. The v4 architecture is the result of cutting everything that sounded good but didn't produce value:
 
-**2. MCP Native — Zero Framework Lock-in**
+| We built | What happened | Decision |
+|----------|---------------|----------|
+| Dream Cycle (LLM audit) | Cron ran but produced surface-level feedback. Real quality came from targeted wiki_review on individual pages. | **Killed.** Manual review > automated audit. |
+| memory_to_wiki sync | OpenViking search API doesn't index memories. Script ran but wrote nothing. | **Killed.** Fix the upstream first. |
+| auto_index (knowledge graph) | graph.json generated but nothing consumed it. Relations in Markdown wikilinks are sufficient. | **Killed.** YAGNI. |
+| 9 page types | Agents confused about routing. `tool` vs `entity` vs `project` — same thing, different label. | **3 types.** concept, entity, person. |
+| Cron pipeline (7 jobs) | Only 2 STARTED entries in cron.log after weeks. | **No cron.** Agent triggers on demand. |
 
-Wiki KB is a standard MCP Server. Any MCP-compatible agent (Claude Desktop, Cursor, Hermes, OpenHands, etc.) can directly call its 15 tools. No SDK, no adapters, no agent code changes needed.
+> **The schema IS the product.** Fewer types means the agent classifies correctly more often. Fewer scripts means less maintenance. Fewer cron jobs means less dead code.
 
-**3. Pure Markdown + Filesystem — Your Data, Always**
+### 2. Compiled Truth + Timeline — Structure Beats Prompts
 
-All knowledge lives as `.md` files. Edit with any text editor, version control with Git, sync across machines. No database, no proprietary format, no platform lock-in.
+Every page has two layers:
 
-**4. Progressive Complexity**
+```
+┌─────────────────────────────┐
+│  COMPILED TRUTH (rewritable) │  ← Current best understanding
+│  Executive Summary           │     Rewritten as a whole, never appended
+│  Key Facts                   │
+│  Relations                   │
+├─────────────────────────────┤
+│  TIMELINE (append-only)      │  ← Evidence chain
+│  - 2026-04-12 | Event...     │     Timestamped, sourced, immutable
+│  - 2026-04-15 | Update...    │
+└─────────────────────────────┘
+```
 
-- **Minimal deploy**: Just Docker — no OpenViking, no LLM API key needed. Wiki CRUD and file search work out of the box.
-- **+ OpenViking**: Semantic search with natural language queries.
+When the summary contradicts the timeline, **timeline wins**. This isn't a prompt engineering trick — it's a structural constraint that makes AI-generated knowledge auditable and self-correcting.
+
+Quality gates enforce this: `wiki_review` promotes draft → active only when summary ≥50 chars and key_facts ≥2 items. In our v4 refactoring, this took quality from 13% (8/58 pages passing) to 100% (40/40).
+
+### 3. Three Types. Not Nine.
+
+Previous versions had concept, entity, person, project, meeting, idea, comparison, query, tool. The agent constantly misrouted pages. The real insight: **the type system should reduce cognitive load, not increase it.**
+
+| Type | Directory | What goes here |
+|------|-----------|----------------|
+| `concept` | `concepts/` | Everything that's not a concrete entity — frameworks, analyses, methodologies, comparisons, meeting notes, ideas. The default. |
+| `entity` | `entities/` | Things with clear boundaries — products, tools, platforms, organizations. Anything the entity registry can manage. |
+| `person` | `people/` | People. Read-only — agents don't auto-create person pages. |
+
+Simple rule: **if you can register it in the entity registry, it's an entity. Otherwise, it's a concept.**
+
+### 4. Graceful Degradation Everywhere
+
+Production taught us that dependencies fail. OpenViking goes down, NAS python breaks, MCP sessions expire. Every component has a fallback:
+
+- **Search**: OpenViking semantic search → local file search (automatic, zero config)
+- **Auth**: API key set → Bearer auth. Unset → open access (safe for LAN)
+- **Session**: MCP StreamableHTTP idle timeout → 24 hours (monkey-patched)
+- **Quality**: OpenViking returns garbage "Untitled" results → filter + fall back to local
+
+The system is designed to be **maximally useful with minimal dependencies**. Docker + Markdown files = everything works. OpenViking = search gets smarter. That's it.
+
+### 5. MCP Native — Knowledge as a Tool
+
+Wiki KB is a standard MCP Server with 15 tools. Any MCP-compatible agent can call it directly — no SDK, no adapter, no framework lock-in. The agent doesn't "query a knowledge base" — it **uses knowledge tools** alongside every other tool it has.
+
+```
+Agent tool belt: web_search, file_edit, terminal, ... wiki_search, wiki_create, wiki_update
+```
+
+This means switching from Claude to GPT to an open-source model costs nothing — your knowledge stays, the tools stay, only the model changes.
+
+---
 
 ## Architecture
 
-### Position in Agent Memory Systems
-
-Wiki-KB is the **structured long-term memory layer** in an agent memory system:
-
 ```
-Conversation → [Agent] → MCP → Wiki KB (structured knowledge)
-                            ↑
-                     OpenViking (semantic search, optional)
+┌─────────────────────────────────────────────────┐
+│                   AI Agent                       │
+│  (Claude / GPT / GLM / any MCP-compatible)      │
+│                                                  │
+│  ┌──────────┐  ┌──────────┐  ┌───────────────┐  │
+│  │ wiki_    │  │ wiki_    │  │ entity_       │  │
+│  │ search   │  │ create   │  │ resolve       │  │
+│  │ wiki_get │  │ wiki_    │  │ entity_register│  │
+│  │ wiki_    │  │ update   │  │ entity_list   │  │
+│  │ list     │  │ wiki_    │  │ entity_merge  │  │
+│  │ wiki_    │  │ review   │  │               │  │
+│  │ health   │  │ wiki_    │  │               │  │
+│  │ wiki_    │  │ undo     │  │               │  │
+│  │ stats    │  │ wiki_log │  │               │  │
+│  └────┬─────┘  └────┬─────┘  └───────┬───────┘  │
+│       │              │                │          │
+└───────┼──────────────┼────────────────┼──────────┘
+        │         MCP (HTTP)            │
+        ▼              ▼                ▼
+┌─────────────────────────────────────────────────┐
+│              Wiki KB MCP Server                   │
+│                                                  │
+│  ┌──────────────┐  ┌──────────────────────────┐  │
+│  │   Markdown   │  │     Entity Registry      │  │
+│  │   Wiki Pages │  │  (ID + Alias Index)      │  │
+│  │              │  │                          │  │
+│  │ concepts/    │  │  openviking → ent_a1b2c3 │  │
+│  │ entities/    │  │  ov → ent_a1b2c3         │  │
+│  │ people/      │  │  hermes → ent_d4e5f6     │  │
+│  └──────┬───────┘  └──────────────────────────┘  │
+│         │                                        │
+│    ┌────┴────┐                                   │
+│    │  Git    │  Auto-commit on every write       │
+│    └─────────┘                                   │
+└─────────────────┬───────────────────────────────┘
+                  │ (optional)
+                  ▼
+┌─────────────────────────────────────────────────┐
+│              OpenViking                          │
+│         Semantic Search Backend                  │
+│    (vector search + local fallback)              │
+└─────────────────────────────────────────────────┘
 ```
 
-### Data Flow
-
-1. Knowledge emerges in conversation → Agent calls `wiki_create` / `wiki_update` via MCP
-2. `wiki_search` queries OpenViking (semantic) with local file search fallback
-3. Human → directly edits `.md` files at any time
+---
 
 ## Quick Start
 
-### 1. Clone & Configure
+### Minimal (just Docker)
 
 ```bash
 git clone https://github.com/SonicBotMan/wiki-kb.git
 cd wiki-kb
 cp .env.example .env
-# Edit .env with your settings
-```
-
-### 2. Docker Deployment
-
-```bash
 docker compose up -d --build
-docker ps --filter name=wiki-brain --format "{{.Status}}"
-```
 
-### 3. Verify MCP Endpoint
-
-```bash
+# Verify
 curl -s -X POST http://localhost:8764/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 ```
 
-## Directory Structure
+That's it. Wiki CRUD and file search work immediately. No LLM API key, no vector database, no external services.
 
-```
-wiki-kb/
-├── scripts/                    # Core scripts (bind-mounted into container)
-│   ├── wiki_mcp_server.py      # MCP Server (15 tools)
-│   ├── wiki_config.py          # Centralized config
-│   ├── wiki_utils.py           # Shared utilities (frontmatter, relations)
-│   ├── entity_registry.py      # Entity registry (ID + alias management)
-│   ├── wiki_health_monitor.py  # Health monitoring script
-│   ├── wiki_quality_check.py   # Page quality validation
-│   ├── wiki-to-notion.py       # Wiki → Notion sync (optional)
-│   ├── wiki-backup.sh          # Backup script
-│   └── wiki-cron-wrapper.sh    # Cron job wrapper with logging
-├── tests/                      # Unit tests
-├── docs/                       # Documentation assets
-├── Dockerfile
-├── docker-compose.yml
-├── docker-compose.production.yml
-├── .env.example
-├── requirements.txt
-├── SCHEMA.md                   # Page structure specification (v4)
-└── README.md
+### With Semantic Search (+ OpenViking)
+
+Add to `.env`:
+```env
+OPENVIKING_ENDPOINT=http://localhost:1933
+OPENVIKING_API_KEY=your-key
+OPENVIKING_ACCOUNT=hermes
+OPENVIKING_USER=default
 ```
 
-### Wiki Data Layout (at runtime)
+Search upgrades from substring matching to vector semantic search with automatic local fallback.
 
-```
-wiki/                           # Bind-mounted as /data in container
-├── concepts/                   # Mental models, frameworks, concepts, analyses
-├── entities/                   # Products, tools, platforms, organizations
-├── people/                     # People (read-only, no auto-creation)
-├── system/                     # System pages (wiki-health, etc.)
-├── raw/                        # Raw materials (excluded from indexing)
-├── logs/                       # Runtime logs
-├── scripts/                    # Same scripts (bind-mount source)
-└── registry.json               # Entity registry
-```
+---
 
 ## MCP Tools (15)
 
-### Wiki Operations (10)
+### Knowledge Operations (10)
 
-| Tool | Description |
+| Tool | What it does |
 |------|-------------|
-| `wiki_search` | Semantic search across wiki pages (OpenViking + local fallback) |
-| `wiki_get` | Read full page content (summary, key facts, relations, timeline) |
-| `wiki_create` | Create new page (auto-routes directory + registers entity) |
-| `wiki_update` | Update specific section (executive_summary, key_facts, relations) |
-| `wiki_append_timeline` | Append Timeline entry (auto-formatted, date stamped) |
-| `wiki_list` | List pages (supports type / status filtering) |
-| `wiki_health` | Health check (registry integrity, disk, OpenViking connectivity) |
-| `wiki_review` | AI-assisted quality review (promotes draft → active) |
-| `wiki_undo` | Revert last N `[wiki-brain]` git commits |
-| `wiki_log` | Show recent `[wiki-brain]` git commit history |
+| `wiki_search` | Semantic search (OpenViking) with automatic local fallback |
+| `wiki_get` | Read full page — summary, facts, relations, timeline |
+| `wiki_create` | Create page → auto-route directory → register entity → draft |
+| `wiki_update` | Update a section (summary / facts / relations) |
+| `wiki_append_timeline` | Add timestamped, sourced event to timeline |
+| `wiki_list` | List pages with type/status filtering |
+| `wiki_health` | System health: registry, disk, OpenViking connectivity |
+| `wiki_review` | Quality gate: promotes draft → active (summary ≥50 chars, facts ≥2) |
+| `wiki_undo` | Revert last N auto-commits (only `[wiki-brain]` prefixed) |
+| `wiki_log` | View commit history |
 
 ### Entity Registry (4)
 
-| Tool | Description |
+| Tool | What it does |
 |------|-------------|
-| `entity_resolve` | Resolve entity by name or alias |
-| `entity_register` | Register new entity |
-| `entity_list` | List entities (supports type filtering) |
-| `entity_merge` | Merge two entities |
+| `entity_resolve` | Name/alias → entity (fuzzy matching) |
+| `entity_register` | Register entity with ID + aliases |
+| `entity_list` | List/filter entities |
+| `entity_merge` | Deduplicate: merge entity A into B |
 
 ### System (1)
 
-| Tool | Description |
+| Tool | What it does |
 |------|-------------|
-| `wiki_stats` | Wiki statistics (page counts, type breakdown, registry stats) |
+| `wiki_stats` | Page counts, type breakdown, registry stats |
 
-### Client Configuration
+---
 
-**Any MCP client:**
-```json
-{
-  "mcpServers": {
-    "wiki-brain": {
-      "url": "http://localhost:8764/mcp",
-      "timeout": 60
-    }
-  }
-}
-```
-
-## Page Format (SCHEMA v4)
-
-Every wiki page follows the **Compiled Truth + Timeline** pattern:
+## Page Format
 
 ```markdown
 ---
-title: Entity Name
-created: 2026-01-15
-updated: 2026-04-18
+title: Hermes Agent
 type: entity
-tags: [ai-product, agent]
-sources: [raw/articles/source.md]
 status: active
+created: 2026-04-12
+updated: 2026-04-18
+tags: [ai-agent, self-evolving]
 ---
 
-# Entity Name
+# Hermes Agent
 
 ## Executive Summary
-Current best understanding. Rewritten as a whole when new information arrives.
+Self-evolving AI agent framework. Open-source CLI agent that improves its own
+skills through conversation-driven learning and scheduled autonomous tasks.
 
 ## Key Facts
-- Fact 1 (structured, directly referenceable by agents)
-- Fact 2
+- 65k+ GitHub stars, active community
+- Skill system: procedural memory that compounds over sessions
+- Memory: built-in persistent memory + external providers (OpenViking, Mem0)
+- MCP native: extensible via Model Context Protocol servers
 
 ## Relations
 | Relation | Target | Description |
 |----------|--------|-------------|
 | uses | [[openviking]] | Semantic search backend |
+| related | [[gbrain]] | Inspired compiled truth pattern |
 
 ---
 
 ## Timeline
 
-- **2026-01-15** | Page created
+- **2026-04-12** | Page created
   [Source: wiki_mcp_server]
-- **2026-03-20** | New version released
-  [Source: Official blog]
+- **2026-04-18** | v4 refactoring: 58→40 pages, 9→3 types
+  [Source: Hermes session]
 ```
 
-### Core Rules
+### The Rules
 
-| Zone | Operation | Description |
-|------|-----------|-------------|
-| Frontmatter | **REWRITE** | Structured metadata |
-| Executive Summary | **REWRITE** | Current best understanding, ≥50 chars |
-| Key Facts | **REWRITE** | Structured fact list, ≥2 items |
-| Relations | **REWRITE** | Relationship table |
-| `---` (separator) | **FIXED** | Must not be removed |
-| Timeline | **APPEND-ONLY** | Strictly append-only, never modify |
+| Zone | Rule | Why |
+|------|------|-----|
+| Executive Summary | **Rewrite as a whole** | Current best understanding, not a changelog |
+| Key Facts | **Structured, referenceable** | Agents can cite individual facts |
+| Relations | **Typed wikilinks** | `uses`, `part-of`, `contrasts`, `evolved-from` |
+| `---` separator | **Never remove** | The line between truth and evidence |
+| Timeline | **Append only, never edit** | Evidence chain must be immutable |
 
-### Page Types (v4)
+---
 
-| type | Directory | Description |
-|------|-----------|-------------|
-| `concept` | `concepts/` | Mental models, frameworks, technical concepts, analyses |
-| `entity` | `entities/` | Products, tools, platforms, organizations, projects |
-| `person` | `people/` | People (read-only, no auto-creation) |
+## Directory Structure
 
-> **v4 simplification**: Previous types (tool, idea, guide, project, meeting, comparison, query) are consolidated into `concept` or `entity`. This keeps the schema minimal while maintaining expressive power.
+```
+wiki-kb/                          # Code repository
+├── scripts/                      # MCP server + utilities (bind-mounted)
+│   ├── wiki_mcp_server.py        # 15 MCP tools
+│   ├── wiki_config.py            # Centralized configuration
+│   ├── wiki_utils.py             # Frontmatter, relations, path routing
+│   ├── entity_registry.py        # Entity ID + alias management
+│   ├── wiki_health_monitor.py    # Health monitoring
+│   ├── wiki_quality_check.py     # Page quality validation
+│   ├── wiki-to-notion.py         # Optional Notion sync
+│   ├── wiki-backup.sh            # Backup script
+│   └── wiki-cron-wrapper.sh      # Cron job wrapper
+├── tests/                        # Unit tests
+├── Dockerfile
+├── docker-compose.yml
+├── SCHEMA.md                     # Full schema specification (v4)
+└── README.md
 
-### Status Lifecycle
+wiki/                             # Data (bind-mounted into container)
+├── concepts/                     # Default type — frameworks, analyses, ideas
+├── entities/                     # Products, tools, platforms, orgs
+├── people/                       # People (read-only)
+├── system/                       # System pages (wiki-health)
+├── raw/                          # Source materials (excluded from search)
+├── logs/                         # Runtime logs
+└── registry.json                 # Entity registry
+```
 
-`draft` → `active` → `archived`
-
-- Agent-created pages start as `draft`
-- `wiki_review` promotes to `active` after quality check (summary ≥50 chars, key_facts ≥2 items)
-- Pages archived when content is fully superseded
-
-## Search
-
-### Default: File Search
-
-When OpenViking is unavailable, `wiki_search` falls back to local file search (substring matching on filenames and content).
-
-### OpenViking Semantic Search (Optional)
-
-With OpenViking configured, `wiki_search` uses vector semantic search with automatic fallback:
-
-1. Wiki pages are synced to OpenViking
-2. OpenViking auto-extracts semantics + vectorizes
-3. `wiki_search` calls OpenViking API, filters out unresolvable results
-4. If zero valid results, automatically falls back to local file search
+---
 
 ## Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `WIKI_ROOT` | No | `/data` | Wiki data root (inside container) |
-| `MCP_PORT` | No | `8764` | MCP Server port |
-| `OPENVIKING_ENDPOINT` | No | `http://localhost:1933` | OpenViking URL |
-| `OPENVIKING_API_KEY` | No | — | OpenViking API Key |
-| `OPENVIKING_ACCOUNT` | No | `hermes` | OpenViking account |
-| `OPENVIKING_USER` | No | `default` | OpenViking user |
-| `MCP_API_KEY` | No | — | MCP auth key (skip if unset, recommended for LAN) |
-| `NOTION_API_KEY` | No | — | Notion API Key (optional sync) |
-| `NOTION_DB_ENTITY` | No | — | Notion Entity database ID |
-| `NOTION_DB_CONCEPT` | No | — | Notion Concept database ID |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `WIKI_ROOT` | No | Wiki data root inside container (default: `/data`) |
+| `MCP_PORT` | No | Server port (default: `8764`) |
+| `MCP_API_KEY` | No | Auth key. Unset = open access (safe for LAN) |
+| `OPENVIKING_ENDPOINT` | No | Enables semantic search |
+| `OPENVIKING_API_KEY` | No | OpenViking auth |
+| `NOTION_API_KEY` | No | Enables Notion sync |
 
-### .env.example
+---
 
-```env
-MCP_PORT=8764
-# MCP_API_KEY=your-key-here    # Optional, for non-LAN deployments
+## What We Learned (Design Rationale)
 
-# OpenViking (optional — enables semantic search)
-# OPENVIKING_ENDPOINT=http://localhost:1933
-# OPENVIKING_API_KEY=your-key
-# OPENVIKING_ACCOUNT=hermes
-# OPENVIKING_USER=default
+### Why 3 types instead of 9
 
-# Notion (optional — enables Notion sync)
-# NOTION_API_KEY=your-key
-# NOTION_DB_ENTITY=ntn_xxx
-# NOTION_DB_CONCEPT=ntn_xxx
-```
+We started with 9 types (concept, entity, person, project, meeting, idea, comparison, query, tool). The agent constantly misrouted: is a "product comparison" a `comparison` or a `concept`? Is a "project update" a `project` or `entity`? Every ambiguous page was a classification error.
 
-## Docker Compose
+3 types eliminate ambiguity: things you can register in the entity registry → `entity`. People → `person`. Everything else → `concept`. Classification accuracy went from ~70% to ~95%.
 
-### Standalone (minimal)
+### Why we killed Dream Cycle
 
-```yaml
-services:
-  wiki-brain:
-    build: .
-    container_name: wiki-brain
-    restart: unless-stopped
-    ports:
-      - "0.0.0.0:8764:8764"
-    volumes:
-      - ./wiki:/data
-      - ./scripts:/app/scripts
-      - ./.env:/app/.env:ro
-    env_file:
-      - .env
-    environment:
-      - PYTHONPATH=/app/scripts
-      - PYTHONUNBUFFERED=1
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.5"
-```
+Dream Cycle was supposed to be the killer feature — an LLM that audits all pages nightly, detects contradictions, fills gaps. In practice, the cron job either didn't run (dead pipeline) or produced surface-level feedback ("this page could use more detail"). The real quality improvement came from `wiki_review` — targeted, on-demand quality checks with concrete pass/fail criteria.
 
-### With OpenViking (semantic search)
+### Why no cron pipeline
 
-```yaml
-services:
-  wiki-brain:
-    build: .
-    container_name: wiki-brain
-    restart: unless-stopped
-    ports:
-      - "0.0.0.0:8764:8764"
-    volumes:
-      - ./wiki:/data
-      - ./scripts:/app/scripts
-      - ./.env:/app/.env:ro
-    env_file:
-      - .env
-    environment:
-      - PYTHONPATH=/app/scripts
-      - PYTHONUNBUFFERED=1
-    networks:
-      - wiki-net
+We had 7 cron jobs. After weeks, only 2 had ever started. The agent triggers wiki operations on demand during conversations — that's when context is available and decisions are meaningful. Scheduled automation without context produces noise.
 
-  openviking:
-    image: openviking/openviking:latest
-    container_name: openviking
-    restart: unless-stopped
-    ports:
-      - "0.0.0.0:1933:1933"
-    volumes:
-      - ./openviking-data:/data
-    networks:
-      - wiki-net
+### Why data stays local
 
-networks:
-  wiki-net:
-    driver: bridge
-```
+We initially pushed wiki data to a private GitHub repo for "backup." But the NAS has RAID, the data contains personal information, and adding a remote just meant another thing to maintain. Git history on the NAS provides rollback. That's enough.
 
-## Backup
+### Why MCP and not a REST API
 
-```bash
-docker exec wiki-brain bash /app/scripts/wiki-backup.sh
-```
+MCP makes knowledge a first-class tool in the agent's tool belt — not an external service it has to "call." The agent uses `wiki_search` the same way it uses `web_search` or `file_edit`. This changes the mental model from "query a database" to "use knowledge as a tool."
 
-Excludes `logs/`, `__pycache__/`, `.git/`, `raw/` and other non-essential directories.
+---
 
-## Development
+## Inspired By
 
-### Local Development
+- **[Karpathy's LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)** — The original insight: compile knowledge at write-time, not retrieve at query-time
+- **[Garry Tan's gbrain](https://github.com/garrytan/gbrain)** — Compiled Truth + Timeline pattern, Dream Cycle automation, production-hardened at scale (10,000+ pages)
+- **[LLM Wiki v2](https://gist.github.com/rohitg00/2067ab416f7bbe447c1977edaaa681e2)** — Memory lifecycle, knowledge graph, hybrid search extensions
+- **[元Skill方法论](https://mp.weixin.qq.com/s/AZ_DFAFf-J7V6MUcH77iLA)** — "好东西 = 总结出来 ≠ 设计出来" — knowledge compounds through summarization, not design
 
-```bash
-pip install -r requirements.txt
-export WIKI_ROOT=./wiki
-export MCP_PORT=8764
-python scripts/wiki_mcp_server.py
-```
-
-### Modifying MCP Server
-
-Scripts are bind-mounted — just edit and restart:
-
-```bash
-docker compose restart
-```
-
-### Running Tests
-
-```bash
-PYTHONPATH=scripts pytest tests/ -v
-```
-
-## FAQ
-
-### Session Terminated Error
-
-MCP StreamableHTTP uses stateful sessions. Built-in: `wiki_mcp_server.py` sets `session_idle_timeout` to 24 hours. Clients should implement auto-reconnect for long-idle periods.
-
-### API Key Auth Not Working
-
-Under FastMCP StreamableHTTP, `HTTP_AUTHORIZATION` may not be set correctly. Solutions:
-1. LAN: Leave `MCP_API_KEY` empty (skip auth)
-2. Auth required: Add `headers: { Authorization: "Bearer <key>" }` in client config
-
-### OpenViking Search Returns No Results
-
-`wiki_search` automatically falls back to local file search when OpenViking returns zero valid results. Check `OPENVIKING_*` env vars if semantic search is needed.
-
-### Undo a Mistaken Change
-
-Every write is auto-committed with `[wiki-brain]` prefix. Only these commits are affected by `wiki_undo`:
-
-```
-wiki_undo(n=1)   # Revert last change
-wiki_log(limit=10) # View history
-```
+---
 
 ## License
 
