@@ -343,16 +343,17 @@ def create_wiki_page(entity: dict, existing_pages: dict) -> Optional[str]:
     """Create a new wiki draft page for an entity."""
     entity_type = entity.get("type", "concept")
     name = entity.get("name", "unnamed")
-    description = entity.get("description", "")
+    summary = entity.get("summary", entity.get("description", ""))
+    key_facts = entity.get("key_facts", [])
 
     # SEC-1: Sanitize inputs to prevent YAML injection
     name = name.replace("\n", " ").replace("\r", " ").strip()
     entity_type = entity_type.replace("\n", " ").replace("\r", " ").strip()
-    description = description.replace("\n", " ").replace("\r", " ").strip()
+    summary = summary.replace("\n", " ").replace("\r", " ").strip()
 
     # Generate slug
     slug = re.sub(r"[^\w\u4e00-\u9fff-]", "-", name.lower())
-    slug = re.sub(r"-+", "-", slug).strip("-")
+    slug = re.sub(r"-+", "-").strip("-")
 
     # SEC-2: Empty slug guard
     if not slug:
@@ -379,6 +380,13 @@ def create_wiki_page(entity: dict, existing_pages: dict) -> Optional[str]:
         "status": "draft",
     }
     fm_yaml = yaml.dump(fm_dict, default_flow_style=None, allow_unicode=True, sort_keys=False).rstrip("\n")
+
+    # Build Key Facts section from extracted facts
+    if key_facts:
+        facts_lines = "\n".join(f"- {f.strip()}" for f in key_facts if f.strip())
+    else:
+        facts_lines = "_待补充_"
+
     content = f"""---
 {fm_yaml}---
 
@@ -386,11 +394,11 @@ def create_wiki_page(entity: dict, existing_pages: dict) -> Optional[str]:
 
 ## Executive Summary
 
-{description}
+{summary}
 
 ## Key Facts
 
-_待补充_
+{facts_lines}
 
 ## Relations
 
@@ -470,12 +478,27 @@ def extract_entities(memories: list[dict], existing_pages: dict) -> dict:
         f"- {pid}: {p['title']}" for pid, p in existing_pages.items()
     )
 
-    system_prompt = f"""你是一个知识库维护助手。分析以下从 OpenViking 自动提取的 memories，提取有持久价值的实体和事件。
+    system_prompt = f"""你是一个知识提炼专家。分析以下从 OpenViking 自动提取的 memories，提取有持久价值的实体和事件。
+
+## 提取原则
+- 只提取有具体、可验证事实的实体（API地址、具体数字、技术架构、关键决策）
+- 泛泛而谈的描述（"是一个XX平台"）不是事实，不要提取
+- 如果信息不足以提取具体事实，宁可跳过也不要编造
 
 严格按以下 JSON 格式输出（不要包含 markdown 代码块标记）：
 {{
   "entities": [
-    {{"name": "实体名", "type": "person|concept|project|tool|organization", "description": "一句话描述", "matched_wiki_id": "已有的wiki页面ID或null"}}
+    {{
+      "name": "实体名",
+      "type": "person|concept|project|tool|organization",
+      "summary": "用1-2句话说明这个实体是什么、为什么重要",
+      "key_facts": [
+        "具体事实1（包含数字/地址/技术细节/关键决策）",
+        "具体事实2",
+        "具体事实3"
+      ],
+      "matched_wiki_id": "已有的wiki页面ID或null"
+    }}
   ],
   "events": [
     {{"description": "事件描述", "related_entities": ["实体名"], "date": "YYYY-MM-DD"}}
@@ -488,13 +511,13 @@ def extract_entities(memories: list[dict], existing_pages: dict) -> dict:
 已有 wiki 页面：
 """ + existing_titles + """
 
-规则：
-- 只提取有实质信息的实体（不是泛泛而谈）
-- 如果实体匹配已有 wiki 页面，填写 matched_wiki_id
+## 规则
+- key_facts 必须是原文中明确出现的具体信息，不得编造或推理
+- 每个实体至少提取2条 key_facts，最多5条。如果提取不到2条，不要创建这个实体
+- 如果实体匹配已有 wiki 页面，填写 matched_wiki_id（此时 key_facts 用于追加到该页面）
 - 事件必须和已有或新实体关联
 - 忽略纯技术操作（如"帮我改个配置"），关注有持久价值的知识
 - 对话是中文的，实体名也用中文
-- 如果某个 memory 没有有价值的信息，跳过它
 - entities 列表可以为空——这表示没有新的有价值的实体需要创建"""
 
     print(f"🧠 Extracting entities from {len(memories)} memories...")
@@ -572,7 +595,10 @@ def main():
         print("\n🔍 DRY RUN — no changes made")
         for e in entities:
             match = e.get("matched_wiki_id") or "NEW"
-            print(f"  [{match}] {e['name']} ({e['type']}): {e.get('description', '')[:80]}")
+            facts = e.get("key_facts", [])
+            facts_preview = "; ".join(facts[:2]) if facts else "(no key facts)"
+            print(f"  [{match}] {e['name']} ({e['type']}): {e.get('summary', '')[:60]}")
+            print(f"         Facts: {facts_preview}")
         for ev in events:
             print(f"  📅 {ev.get('date', '?')}: {ev['description'][:80]}")
         for r in relations:
@@ -586,7 +612,8 @@ def main():
     for entity in entities:
         matched_id = entity.get("matched_wiki_id")
         name = entity.get("name", "")
-        description = entity.get("description", "")
+        summary = entity.get("summary", entity.get("description", ""))
+        key_facts = entity.get("key_facts", [])
 
         # Check Entity Registry for existing entity
         if not matched_id and HAS_REGISTRY:
@@ -599,8 +626,11 @@ def main():
                         matched_id = reg_slug
 
         if matched_id and matched_id in existing_pages:
-            # Existing page — append to timeline
-            entry = f"- **{today}** | {description}\n  [Source: OpenViking memory, {today}]"
+            # Existing page — append to timeline with key facts
+            facts_text = ""
+            if key_facts:
+                facts_text = "\n  Key Facts: " + "; ".join(key_facts)
+            entry = f"- **{today}** | {summary}{facts_text}\n  [Source: OpenViking memory, {today}]"
             append_to_timeline(existing_pages[matched_id]["path"], entry)
         else:
             # New entity — create draft page

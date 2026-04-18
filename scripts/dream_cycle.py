@@ -221,7 +221,8 @@ def analyze_knowledge_graph(summary: str) -> dict:
   "outdated": [{"page": "page-id", "field": "updated|status|tags（frontmatter字段名）或 Executive Summary（表示需要更新摘要内容）", "current": "当前值", "suggested": "建议值/建议的新摘要文本", "reason": "原因"}],
   "gaps": [{"topic": "主题", "description": "描述", "priority": "high|medium|low"}],
   "relation_issues": [{"page": "page-id", "issue": "描述", "suggestion": "建议"}],
-  "quality_score": {"overall": 1-10, "coverage": 1-10, "consistency": 1-10, "freshness": 1-10},
+  "low_value": [{"page": "page-id", "issue": "问题描述", "suggestion": "建议：补充具体事实或删除"}],
+  "quality_score": {"overall": 1-10, "coverage": 1-10, "consistency": 1-10, "freshness": 1-10, "value": 1-10},
   "summary": "一句话总结本次审计结果"
 }
 
@@ -230,7 +231,13 @@ def analyze_knowledge_graph(summary: str) -> dict:
 - 不要建议添加用户未提及的信息
 - "outdated" 中的日期检查：对比 "updated" 字段和当前时间
 - "relation_issues" 检查：单向引用、悬空链接、循环依赖
-- 质量评分 10 分制，综合加权 overall"""
+- 质量评分 10 分制，综合加权 overall
+- "low_value" 检测：识别低价值页面，包括：
+  * Key Facts 为空或极少
+  * Executive Summary 是一句话废话（如"这是一个关于X的页面"）
+  * 内容全是从其他地方搬运的无结构文本（搬运工页面）
+  * 信息密度极低，正文少于3个要点
+- "value" 评分维度：信息价值/内容深度，评估页面是否包含可执行的见解、具体事实、数据"""
 
     print("🌙 Dream Cycle: 调用 LLM 分析知识图谱...")
     raw = call_llm(summary, system_prompt)
@@ -248,7 +255,8 @@ def analyze_knowledge_graph(summary: str) -> dict:
         print(f"⚠ LLM 输出解析失败: {e}")
         print(f"Raw output: {raw[:500]}")
         return {"contradictions": [], "outdated": [], "gaps": [],
-                "relation_issues": [], "quality_score": {"overall": 0},
+                "relation_issues": [], "low_value": [],
+                "quality_score": {"overall": 0, "value": 0},
                 "summary": "LLM 输出解析失败", "raw": raw}
 
 
@@ -282,6 +290,19 @@ def generate_patches(analysis: dict, pages: list[dict]) -> list[dict]:
                 "path": page_map[pid]["path"],
                 "issue": item.get("issue", ""),
                 "suggestion": item.get("suggestion", ""),
+            })
+
+    # 处理 low_value — 记录但不自动应用（需要人工审核）
+    for item in analysis.get("low_value", []):
+        pid = item.get("page", "")
+        if pid in page_map:
+            patches.append({
+                "type": "low_value_warning",
+                "page": pid,
+                "path": page_map[pid]["path"],
+                "issue": item.get("issue", ""),
+                "suggestion": item.get("suggestion", ""),
+                "auto_apply": False,
             })
 
     return patches
@@ -395,6 +416,7 @@ def save_report(analysis: dict, patches: list[dict], applied: bool = False):
         f"**Coverage**: {score.get('coverage', 'N/A')}/10",
         f"**Consistency**: {score.get('consistency', 'N/A')}/10",
         f"**Freshness**: {score.get('freshness', 'N/A')}/10",
+        f"**Value**: {score.get('value', 'N/A')}/10",
         f"",
         f"## Summary",
         f"{analysis.get('summary', 'N/A')}",
@@ -422,6 +444,13 @@ def save_report(analysis: dict, patches: list[dict], applied: bool = False):
             lines.append(f"  Suggestion: {r['suggestion']}")
         lines.append("")
 
+    if analysis.get("low_value"):
+        lines.append("## 📉 Low-Value Pages")
+        for lv in analysis["low_value"]:
+            lines.append(f"- **[{lv['page']}]** {lv['issue']}")
+            lines.append(f"  Suggestion: {lv['suggestion']}")
+        lines.append("")
+
     if analysis.get("gaps"):
         lines.append("## 📋 Knowledge Gaps")
         for g in analysis["gaps"]:
@@ -445,6 +474,38 @@ def main():
     args = set(sys.argv[1:])
     dry_run = "--dry-run" in args
     apply_patches = "--apply" in args
+    check_changes = "--check-changes" in args
+
+    # Manual triggers skip change check
+    if not dry_run and not apply_patches:
+        # --check-changes mode: verify recent wiki activity before auditing
+        if check_changes:
+            print("🔍 Checking for recent wiki changes (24h window)...")
+            threshold = time.time() - 86400  # 24 hours ago
+
+            content_dirs = [
+                CONCEPTS_DIR, ENTITIES_DIR, PEOPLE_DIR, PROJECTS_DIR,
+                MEETINGS_DIR, IDEAS_DIR, COMPARISONS_DIR, QUERIES_DIR, TOOLS_DIR
+            ]
+
+            changed_files = []
+            for content_dir in content_dirs:
+                if not content_dir.exists():
+                    continue
+                for md_file in content_dir.glob("*.md"):
+                    if os.path.getmtime(md_file) >= threshold:
+                        changed_files.append(str(md_file.relative_to(WIKI_ROOT)))
+
+            if not changed_files:
+                print("🌙 No changes in 24h, skipping audit")
+                sys.exit(0)
+            elif len(changed_files) < 3:
+                print(f"🌙 Only {len(changed_files)} pages changed in 24h, skipping audit")
+                sys.exit(0)
+
+            print(f"   ✓ Found {len(changed_files)} pages changed in 24h, proceeding with audit...")
+            for f in changed_files:
+                print(f"      - {f}")
 
     if not LLM_API_KEY:
         # Try loading from .env
@@ -482,7 +543,8 @@ def main():
     print(f"\n📊 Quality Score: {score.get('overall', '?')}/10 "
           f"(coverage {score.get('coverage', '?')}, "
           f"consistency {score.get('consistency', '?')}, "
-          f"freshness {score.get('freshness', '?')})")
+          f"freshness {score.get('freshness', '?')}, "
+          f"value {score.get('value', '?')})")
     print(f"📝 Summary: {analysis.get('summary', 'N/A')}")
 
     # 4. Generate patches
