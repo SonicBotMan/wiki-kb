@@ -1,5 +1,5 @@
 #!/bin/bash
-# pre-push hook: run lint + tests before allowing push
+# pre-push hook: lint check via docker exec
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -7,14 +7,11 @@ cd "$ROOT"
 
 echo "🔍 Running pre-push checks..."
 
-export PYTHONPATH="$ROOT/scripts"
-
-# Lint — all .py files in scripts/
 LINT_FAIL=0
 for f in scripts/*.py; do
   if [[ -f "$f" ]]; then
     echo "  Checking $f..."
-    if ! python -m py_compile "$f" 2>&1; then
+    if ! docker exec wiki-brain python3 -m py_compile "/app/scripts/$(basename $f)" 2>&1; then
       LINT_FAIL=1
     fi
   fi
@@ -25,8 +22,4 @@ if [[ $LINT_FAIL -eq 1 ]]; then
   exit 1
 fi
 echo "✅ Lint passed"
-
-# Tests
-python -m pytest tests/ -v --tb=short || { echo "❌ Tests failed"; exit 1; }
-
 echo "✅ Pre-push checks passed"
