@@ -1,0 +1,274 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900">
+  <style>
+    text { font-family: 'WenQuanYi Zen Hei', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="8" markerHeight="6" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#5a5a5a"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="8" markerHeight="6" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4a7ab5"/>
+    </marker>
+    <marker id="arr-teal" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="8" markerHeight="6" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#5a9e8f"/>
+    </marker>
+    <marker id="arr-gray" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="8" markerHeight="6" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#999"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="900" fill="#f8f6f3"/>
+
+  <!-- Title -->
+  <text x="60" y="42" fill="#1a1a1a" font-size="22" font-weight="700">Wiki Knowledge Base v4</text>
+  <text x="60" y="62" fill="#6a6a6a" font-size="12" font-weight="500" letter-spacing="0.06em">ARCHITECTURE BLUEPRINT — KNOWLEDGE THAT COMPOUNDS</text>
+  <line x1="60" y1="72" x2="1140" y2="72" stroke="#d4d0cc" stroke-width="1"/>
+
+  <!-- ====== LAYER 1: AI Agent (top) ====== -->
+  <rect x="40" y="88" width="1120" height="115" rx="8" fill="#9dd4c7" fill-opacity="0.12" stroke="#9dd4c7" stroke-width="1" stroke-dasharray="6,4"/>
+  <text x="56" y="106" fill="#5a9e8f" font-size="10" font-weight="600" letter-spacing="0.08em">AI AGENT LAYER</text>
+
+  <!-- Agent hexagon -->
+  <polygon points="180,155 222,131 264,131 306,155 264,179 222,179" fill="#9dd4c7" stroke="#4a4a4a" stroke-width="2"/>
+  <text x="243" y="151" text-anchor="middle" fill="#1a1a1a" font-size="12" font-weight="600">AI Agent</text>
+  <text x="243" y="167" text-anchor="middle" fill="#4a4a4a" font-size="10">Claude / GPT / GLM</text>
+
+  <!-- Agent tools -->
+  <rect x="400" y="120" width="110" height="42" rx="8" fill="#9dd4c7" stroke="#4a4a4a" stroke-width="1.5"/>
+  <text x="455" y="138" text-anchor="middle" fill="#1a1a1a" font-size="11" font-weight="600">wiki_search</text>
+  <text x="455" y="153" text-anchor="middle" fill="#6a6a6a" font-size="9">语义搜索 + 降级</text>
+
+  <rect x="530" y="120" width="110" height="42" rx="8" fill="#9dd4c7" stroke="#4a4a4a" stroke-width="1.5"/>
+  <text x="585" y="138" text-anchor="middle" fill="#1a1a1a" font-size="11" font-weight="600">wiki_get</text>
+  <text x="585" y="153" text-anchor="middle" fill="#6a6a6a" font-size="9">读取完整页面</text>
+
+  <rect x="660" y="120" width="110" height="42" rx="8" fill="#9dd4c7" stroke="#4a4a4a" stroke-width="1.5"/>
+  <text x="715" y="138" text-anchor="middle" fill="#1a1a1a" font-size="11" font-weight="600">wiki_create</text>
+  <text x="715" y="153" text-anchor="middle" fill="#6a6a6a" font-size="9">创建 + 注册实体</text>
+
+  <rect x="790" y="120" width="110" height="42" rx="8" fill="#9dd4c7" stroke="#4a4a4a" stroke-width="1.5"/>
+  <text x="845" y="138" text-anchor="middle" fill="#1a1a1a" font-size="11" font-weight="600">wiki_update</text>
+  <text x="845" y="153" text-anchor="middle" fill="#6a6a6a" font-size="9">更新摘要/事实</text>
+
+  <rect x="920" y="120" width="110" height="42" rx="8" fill="#9dd4c7" stroke="#4a4a4a" stroke-width="1.5"/>
+  <text x="975" y="138" text-anchor="middle" fill="#1a1a1a" font-size="11" font-weight="600">wiki_review</text>
+  <text x="975" y="153" text-anchor="middle" fill="#6a6a6a" font-size="9">质量门控 → active</text>
+
+  <rect x="1050" y="120" width="95" height="42" rx="8" fill="#e8e6e3" stroke="#4a4a4a" stroke-width="1.5"/>
+  <text x="1097" y="138" text-anchor="middle" fill="#1a1a1a" font-size="11" font-weight="600">+9 tools</text>
+  <text x="1097" y="153" text-anchor="middle" fill="#6a6a6a" font-size="9">entity/undo/log</text>
+
+  <!-- Agent → tools arrows -->
+  <line x1="306" y1="155" x2="395" y2="141" stroke="#5a9e8f" stroke-width="1.5" marker-end="url(#arr-teal)"/>
+
+  <!-- ====== LAYER 2: MCP Server (middle) ====== -->
+  <rect x="40" y="222" width="1120" height="155" rx="8" fill="#a8c5e6" fill-opacity="0.12" stroke="#a8c5e6" stroke-width="1" stroke-dasharray="6,4"/>
+  <text x="56" y="240" fill="#4a7ab5" font-size="10" font-weight="600" letter-spacing="0.08em">MCP SERVER LAYER</text>
+
+  <!-- MCP Server hexagon -->
+  <polygon points="180,300 222,276 264,276 306,300 264,324 222,324" fill="#a8c5e6" stroke="#4a4a4a" stroke-width="2.5"/>
+  <text x="243" y="296" text-anchor="middle" fill="#1a1a1a" font-size="12" font-weight="600">MCP</text>
+  <text x="243" y="312" text-anchor="middle" fill="#4a4a4a" font-size="10">Server</text>
+
+  <!-- Internal components -->
+  <rect x="400" y="248" width="155" height="48" rx="6" fill="#ffffff" stroke="#4a4a4a" stroke-width="1.5"/>
+  <text x="477" y="268" text-anchor="middle" fill="#1a1a1a" font-size="11" font-weight="600">wiki_mcp_server.py</text>
+  <text x="477" y="284" text-anchor="middle" fill="#6a6a6a" font-size="9">15 个 MCP 工具实现</text>
+
+  <rect x="575" y="248" width="140" height="48" rx="6" fill="#ffffff" stroke="#4a4a4a" stroke-width="1.5"/>
+  <text x="645" y="268" text-anchor="middle" fill="#1a1a1a" font-size="11" font-weight="600">wiki_utils.py</text>
+  <text x="645" y="284" text-anchor="middle" fill="#6a6a6a" font-size="9">frontmatter / 路由</text>
+
+  <rect x="735" y="248" width="140" height="48" rx="6" fill="#ffffff" stroke="#4a4a4a" stroke-width="1.5"/>
+  <text x="805" y="268" text-anchor="middle" fill="#1a1a1a" font-size="11" font-weight="600">entity_registry.py</text>
+  <text x="805" y="284" text-anchor="middle" fill="#6a6a6a" font-size="9">ID + 别名索引</text>
+
+  <rect x="895" y="248" width="130" height="48" rx="6" fill="#ffffff" stroke="#4a4a4a" stroke-width="1.5"/>
+  <text x="960" y="268" text-anchor="middle" fill="#1a1a1a" font-size="11" font-weight="600">wiki_config.py</text>
+  <text x="960" y="284" text-anchor="middle" fill="#6a6a6a" font-size="9">集中配置管理</text>
+
+  <!-- Key design boxes -->
+  <rect x="400" y="312" width="180" height="50" rx="6" fill="#f4e4c1" fill-opacity="0.5" stroke="#4a4a4a" stroke-width="1"/>
+  <text x="490" y="332" text-anchor="middle" fill="#1a1a1a" font-size="11" font-weight="600">Compiled Truth + Timeline</text>
+  <text x="490" y="349" text-anchor="middle" fill="#6a6a6a" font-size="9">结构约束战胜 Prompt 工程</text>
+
+  <rect x="600" y="312" width="180" height="50" rx="6" fill="#f4e4c1" fill-opacity="0.5" stroke="#4a4a4a" stroke-width="1"/>
+  <text x="690" y="332" text-anchor="middle" fill="#1a1a1a" font-size="11" font-weight="600">Quality Gate</text>
+  <text x="690" y="349" text-anchor="middle" fill="#6a6a6a" font-size="9">summary ≥50 chars, facts ≥2</text>
+
+  <rect x="800" y="312" width="225" height="50" rx="6" fill="#f4e4c1" fill-opacity="0.5" stroke="#4a4a4a" stroke-width="1"/>
+  <text x="912" y="332" text-anchor="middle" fill="#1a1a1a" font-size="11" font-weight="600">Graceful Degradation</text>
+  <text x="912" y="349" text-anchor="middle" fill="#6a6a6a" font-size="9">OV → 本地文件 → 空结果过滤</text>
+
+  <!-- MCP → tools connections -->
+  <line x1="306" y1="300" x2="395" y2="272" stroke="#4a7ab5" stroke-width="1.5" marker-end="url(#arr-blue)"/>
+
+  <!-- ====== LAYER 3: Knowledge Store (bottom) ====== -->
+  <rect x="40" y="396" width="680" height="485" rx="8" fill="#e8e6e3" fill-opacity="0.15" stroke="#e8e6e3" stroke-width="1" stroke-dasharray="6,4"/>
+  <text x="56" y="414" fill="#8a8a8a" font-size="10" font-weight="600" letter-spacing="0.08em">KNOWLEDGE STORE (Pure Markdown + Git)</text>
+
+  <!-- Type: concept -->
+  <rect x="65" y="430" width="200" height="190" rx="8" fill="#ffffff" stroke="#4a4a4a" stroke-width="1.5"/>
+  <rect x="65" y="430" width="200" height="28" rx="8" fill="#a8c5e6" stroke="none"/>
+  <rect x="65" y="448" width="200" height="10" fill="#a8c5e6" stroke="none"/>
+  <text x="165" y="450" text-anchor="middle" fill="#1a1a1a" font-size="12" font-weight="600">concepts/ (28 pages)</text>
+  <text x="80" y="478" fill="#6a6a6a" font-size="10">心智模型、框架、方法论</text>
+  <text x="80" y="496" fill="#6a6a6a" font-size="10">深度分析、技术概念</text>
+  <line x1="80" y1="508" x2="250" y2="508" stroke="#e0ddd8" stroke-width="0.8"/>
+  <text x="80" y="525" fill="#1a1a1a" font-size="10" font-weight="500">Karpathy LLM Wiki vs RAG</text>
+  <text x="80" y="543" fill="#1a1a1a" font-size="10" font-weight="500">百度文库AI生态战略</text>
+  <text x="80" y="561" fill="#1a1a1a" font-size="10" font-weight="500">元Skill方法论</text>
+  <text x="80" y="579" fill="#1a1a1a" font-size="10" font-weight="500">自进化Agent架构</text>
+  <text x="80" y="597" fill="#1a1a1a" font-size="10" font-weight="500">Hermes Agent进阶指南</text>
+  <text x="80" y="612" fill="#999" font-size="9">... 等 28 页</text>
+
+  <!-- Type: entity -->
+  <rect x="285" y="430" width="200" height="190" rx="8" fill="#ffffff" stroke="#4a4a4a" stroke-width="1.5"/>
+  <rect x="285" y="430" width="200" height="28" rx="8" fill="#9dd4c7" stroke="none"/>
+  <rect x="285" y="448" width="200" height="10" fill="#9dd4c7" stroke="none"/>
+  <text x="385" y="450" text-anchor="middle" fill="#1a1a1a" font-size="12" font-weight="600">entities/ (12 pages)</text>
+  <text x="300" y="478" fill="#6a6a6a" font-size="10">产品、工具、平台、组织</text>
+  <text x="300" y="496" fill="#6a6a6a" font-size="10">有明确实体边界的知识</text>
+  <line x1="300" y1="508" x2="470" y2="508" stroke="#e0ddd8" stroke-width="0.8"/>
+  <text x="300" y="525" fill="#1a1a1a" font-size="10" font-weight="500">Hermes Agent</text>
+  <text x="300" y="543" fill="#1a1a1a" font-size="10" font-weight="500">OpenViking</text>
+  <text x="300" y="561" fill="#1a1a1a" font-size="10" font-weight="500">太极AI</text>
+  <text x="300" y="579" fill="#1a1a1a" font-size="10" font-weight="500">百家号AI应用</text>
+  <text x="300" y="597" fill="#1a1a1a" font-size="10" font-weight="500">GBrain</text>
+  <text x="300" y="612" fill="#999" font-size="9">... 等 12 页</text>
+
+  <!-- Type: person -->
+  <rect x="505" y="430" width="195" height="190" rx="8" fill="#ffffff" stroke="#4a4a4a" stroke-width="1.5"/>
+  <rect x="505" y="430" width="195" height="28" rx="8" fill="#f4e4c1" stroke="none"/>
+  <rect x="505" y="448" width="195" height="10" fill="#f4e4c1" stroke="none"/>
+  <text x="602" y="450" text-anchor="middle" fill="#1a1a1a" font-size="12" font-weight="600">people/ (1 page)</text>
+  <text x="520" y="478" fill="#6a6a6a" font-size="10">人物（只读）</text>
+  <text x="520" y="496" fill="#6a6a6a" font-size="10">Agent 不自动创建</text>
+  <line x1="520" y1="508" x2="685" y2="508" stroke="#e0ddd8" stroke-width="0.8"/>
+  <text x="520" y="525" fill="#1a1a1a" font-size="10" font-weight="500">User Life Timeline</text>
+
+  <!-- Page structure example -->
+  <rect x="65" y="635" width="635" height="230" rx="8" fill="#ffffff" stroke="#4a4a4a" stroke-width="1.5"/>
+  <rect x="65" y="635" width="635" height="28" rx="8" fill="#f4e4c1" fill-opacity="0.6" stroke="none"/>
+  <rect x="65" y="653" width="635" height="10" fill="#f4e4c1" fill-opacity="0.6" stroke="none"/>
+  <text x="382" y="654" text-anchor="middle" fill="#1a1a1a" font-size="12" font-weight="600">页面结构 (Compiled Truth + Timeline)</text>
+
+  <!-- Frontmatter -->
+  <rect x="85" y="675" width="595" height="35" rx="4" fill="#f0eeeb" stroke="#d4d0cc" stroke-width="0.8"/>
+  <text x="100" y="693" fill="#6a6a6a" font-size="10" font-family="'Courier New', monospace">title: | type: concept/entity/person | status: draft → active → archived | tags: [...] | updated: YYYY-MM-DD</text>
+
+  <!-- Executive Summary -->
+  <rect x="85" y="720" width="280" height="55" rx="4" fill="#a8c5e6" fill-opacity="0.15" stroke="#a8c5e6" stroke-width="0.8"/>
+  <text x="100" y="738" fill="#1a1a1a" font-size="11" font-weight="600">Executive Summary</text>
+  <text x="100" y="755" fill="#6a6a6a" font-size="9">当前最佳理解，整体重写不追加</text>
+  <text x="100" y="769" fill="#999" font-size="9">≥50 chars (quality gate)</text>
+
+  <!-- Key Facts -->
+  <rect x="380" y="720" width="300" height="55" rx="4" fill="#9dd4c7" fill-opacity="0.15" stroke="#9dd4c7" stroke-width="0.8"/>
+  <text x="395" y="738" fill="#1a1a1a" font-size="11" font-weight="600">Key Facts</text>
+  <text x="395" y="755" fill="#6a6a6a" font-size="9">结构化事实，可被 Agent 直接引用</text>
+  <text x="395" y="769" fill="#999" font-size="9">≥2 items (quality gate)</text>
+
+  <!-- Relations -->
+  <rect x="85" y="785" width="595" height="30" rx="4" fill="#f4e4c1" fill-opacity="0.15" stroke="#f4e4c1" stroke-width="0.8"/>
+  <text x="100" y="804" fill="#1a1a1a" font-size="10" font-weight="500">Relations</text>
+  <text x="170" y="804" fill="#6a6a6a" font-size="9">uses | part-of | related | contrasts | implements | created-by | evolved-from</text>
+
+  <!-- Separator -->
+  <line x1="85" y1="825" x2="680" y2="825" stroke="#4a4a4a" stroke-width="2" stroke-dasharray="2,2"/>
+
+  <!-- Timeline -->
+  <rect x="85" y="833" width="595" height="22" rx="4" fill="#e8e6e3" fill-opacity="0.4" stroke="#e8e6e3" stroke-width="0.8"/>
+  <text x="100" y="848" fill="#1a1a1a" font-size="10" font-weight="500">Timeline</text>
+  <text x="160" y="848" fill="#6a6a6a" font-size="9">APPEND-ONLY — - **YYYY-MM-DD** | 事件描述 [Source: 来源] — 证据链不可修改</text>
+
+  <!-- ====== RIGHT PANEL: Design Principles ====== -->
+  <rect x="745" y="396" width="415" height="485" rx="8" fill="#f4e4c1" fill-opacity="0.1" stroke="#f4e4c1" stroke-width="1" stroke-dasharray="6,4"/>
+  <text x="761" y="414" fill="#8a7a5a" font-size="10" font-weight="600" letter-spacing="0.08em">DESIGN PHILOSOPHY</text>
+
+  <!-- Principle 1 -->
+  <rect x="765" y="430" width="375" height="62" rx="6" fill="#ffffff" stroke="#4a4a4a" stroke-width="1"/>
+  <text x="780" y="450" fill="#1a1a1a" font-size="11" font-weight="600">❶ 知识在写入时编译，不是查询时检索</text>
+  <text x="780" y="467" fill="#6a6a6a" font-size="9">智力劳动前置。RAG 每次从零拼上下文，</text>
+  <text x="780" y="482" fill="#6a6a6a" font-size="9">Wiki 把知识编撰为结构化 Markdown，查询变定位。</text>
+
+  <!-- Principle 2 -->
+  <rect x="765" y="502" width="375" height="62" rx="6" fill="#ffffff" stroke="#4a4a4a" stroke-width="1"/>
+  <text x="780" y="522" fill="#1a1a1a" font-size="11" font-weight="600">❷ 结构约束战胜 Prompt 工程</text>
+  <text x="780" y="539" fill="#6a6a6a" font-size="9">Compiled Truth 可重写，Timeline 只追加。</text>
+  <text x="780" y="554" fill="#6a6a6a" font-size="9">当 Summary 与 Timeline 矛盾 → 证据胜。</text>
+
+  <!-- Principle 3 -->
+  <rect x="765" y="574" width="375" height="62" rx="6" fill="#ffffff" stroke="#4a4a4a" stroke-width="1"/>
+  <text x="780" y="594" fill="#1a1a1a" font-size="11" font-weight="600">❸ 三种类型，不是九种</text>
+  <text x="780" y="611" fill="#6a6a6a" font-size="9">concept (默认) / entity (可注册) / person (只读)。</text>
+  <text x="780" y="626" fill="#6a6a6a" font-size="9">类型越少，Agent 分类越准，一致性越高。</text>
+
+  <!-- Principle 4 -->
+  <rect x="765" y="646" width="375" height="62" rx="6" fill="#ffffff" stroke="#4a4a4a" stroke-width="1"/>
+  <text x="780" y="666" fill="#1a1a1a" font-size="11" font-weight="600">❹ 优雅降级，不依赖</text>
+  <text x="780" y="683" fill="#6a6a6a" font-size="9">OV 挂 → 本地搜索。Session 过期 → 24h 超时。</text>
+  <text x="780" y="698" fill="#6a6a6a" font-size="9">Docker + Markdown = 全部可用。OV = 搜索更聪明。</text>
+
+  <!-- Principle 5 -->
+  <rect x="765" y="718" width="375" height="62" rx="6" fill="#ffffff" stroke="#4a4a4a" stroke-width="1"/>
+  <text x="780" y="738" fill="#1a1a1a" font-size="11" font-weight="600">❺ 从生产中诞生，不是从理论中设计</text>
+  <text x="780" y="755" fill="#6a6a6a" font-size="9">砍掉 Dream Cycle / memory_to_wiki / auto_index。</text>
+  <text x="780" y="770" fill="#6a6a6a" font-size="9">砍掉 7 个 cron 任务。砍掉 6 种页面类型。</text>
+
+  <!-- Principle 6 -->
+  <rect x="765" y="790" width="375" height="80" rx="6" fill="#ffffff" stroke="#4a4a4a" stroke-width="1"/>
+  <text x="780" y="810" fill="#1a1a1a" font-size="11" font-weight="600">❻ 知识会复利</text>
+  <text x="780" y="827" fill="#6a6a6a" font-size="9">Karpathy: "LLM 从零推导知识，没有积累。"</text>
+  <text x="780" y="842" fill="#6a6a6a" font-size="9">GBrain: 13 年日历 → 10000+ 页知识。</text>
+  <text x="780" y="857" fill="#6a6a6a" font-size="9">Wiki KB: 58→40 页，质量 13%→100%。</text>
+
+  <!-- ====== ARROWS: Agent → MCP ====== -->
+  <line x1="243" y1="179" x2="243" y2="271" stroke="#5a9e8f" stroke-width="2" marker-end="url(#arr-teal)"/>
+  <rect x="253" y="215" width="72" height="18" rx="3" fill="#f8f6f3" stroke="none"/>
+  <text x="289" y="228" text-anchor="middle" fill="#5a9e8f" font-size="9" font-weight="500">MCP HTTP</text>
+
+  <!-- ====== ARROWS: MCP → Knowledge Store ====== -->
+  <line x1="165" y1="324" x2="165" y2="425" stroke="#4a7ab5" stroke-width="2" marker-end="url(#arr-blue)"/>
+  <rect x="175" y="366" width="80" height="18" rx="3" fill="#f8f6f3" stroke="none"/>
+  <text x="215" y="379" text-anchor="middle" fill="#4a7ab5" font-size="9" font-weight="500">读/写 Markdown</text>
+
+  <!-- ====== Optional: OpenViking ====== -->
+  <rect x="745" y="250" width="415" height="110" rx="8" fill="#ffffff" fill-opacity="0.6" stroke="#999" stroke-width="1" stroke-dasharray="5,3"/>
+  <text x="761" y="268" fill="#999" font-size="10" font-weight="600" letter-spacing="0.06em">OPTIONAL: SEMANTIC SEARCH</text>
+
+  <!-- OV node -->
+  <ellipse cx="820" cy="310" rx="45" ry="16" fill="#e8e6e3" stroke="#4a4a4a" stroke-width="1.5"/>
+  <text x="820" y="315" text-anchor="middle" fill="#1a1a1a" font-size="11" font-weight="600">OpenViking</text>
+
+  <text x="890" y="295" fill="#6a6a6a" font-size="9">向量语义搜索</text>
+  <text x="890" y="310" fill="#6a6a6a" font-size="9">自动降级到本地文件搜索</text>
+  <text x="890" y="325" fill="#6a6a6a" font-size="9">过滤 "Untitled" 垃圾结果</text>
+  <text x="890" y="340" fill="#999" font-size="9">配置 OPENVIKING_* 环境变量启用</text>
+
+  <!-- MCP → OV dashed arrow -->
+  <line x1="306" y1="280" x2="770" y2="300" stroke="#999" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-gray)"/>
+  <text x="530" y="278" text-anchor="middle" fill="#999" font-size="9">search (optional)</text>
+
+  <!-- ====== LEGEND ====== -->
+  <rect x="745" y="88" width="415" height="50" rx="6" fill="#ffffff" stroke="#4a4a4a" stroke-width="1"/>
+  <text x="760" y="106" fill="#1a1a1a" font-size="10" font-weight="600">LEGEND</text>
+
+  <line x1="830" y1="102" x2="860" y2="102" stroke="#5a9e8f" stroke-width="2" marker-end="url(#arr-teal)"/>
+  <text x="868" y="106" fill="#6a6a6a" font-size="9">Agent 工具调用</text>
+
+  <line x1="950" y1="102" x2="980" y2="102" stroke="#4a7ab5" stroke-width="2" marker-end="url(#arr-blue)"/>
+  <text x="988" y="106" fill="#6a6a6a" font-size="9">数据读写</text>
+
+  <line x1="830" y1="125" x2="860" y2="125" stroke="#999" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-gray)"/>
+  <text x="868" y="129" fill="#6a6a6a" font-size="9">可选依赖</text>
+
+  <rect x="950" y="118" width="12" height="12" rx="2" fill="#f4e4c1" stroke="#4a4a4a" stroke-width="0.8"/>
+  <text x="968" y="129" fill="#6a6a6a" font-size="9">设计原则</text>
+
+  <!-- Version badge -->
+  <rect x="1050" y="42" width="110" height="22" rx="4" fill="#4a4a4a"/>
+  <text x="1105" y="57" text-anchor="middle" fill="#f8f6f3" font-size="10" font-weight="600">v4 · 2026-04-18</text>
+
+</svg>
