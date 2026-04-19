@@ -17,8 +17,7 @@ logger = logging.getLogger(__name__)
 
 # === Wiki 目录结构 ===
 _WIKI_SUBDIRS = [
-    "concepts", "entities", "people", "projects",
-    "meetings", "ideas", "comparisons", "queries", "tools"
+    "concepts", "entities", "people",
 ]
 
 
@@ -28,10 +27,7 @@ class WikiConfig:
     # 路径
     wiki_root: Path
     registry_file: Path
-    graph_file: Path
     schema_file: Path
-    state_file: Path
-    report_dir: Path
     env_file: Path
 
     # 子目录 (只读属性)
@@ -48,11 +44,7 @@ class WikiConfig:
     openviking_user: str = "default"
     openviking_bin: str = ""  # CLI binary path (optional)
 
-    # LLM (for dream_cycle, memory_to_wiki)
-    glm_base_url: str = "https://open.bigmodel.cn/api/paas/v4"
-    glm_api_key: str = ""
-    dream_cycle_model: str = "glm-4-flash"
-    memory_to_wiki_model: str = "glm-4-flash"
+    # LLM config removed in v4 (dream_cycle/memory_to_wiki deleted)
 
     # Notion (for wiki-to-notion)
     notion_api_key: str = ""
@@ -154,16 +146,12 @@ def load_config(wiki_root: Optional[str] = None) -> WikiConfig:
 
     # 5. 构建 WikiConfig
     ov = yaml_cfg.get("openviking", {})
-    llm = yaml_cfg.get("llm", {})
     notion = yaml_cfg.get("notion", {})
 
     config = WikiConfig(
         wiki_root=root,
         registry_file=root / "registry.json",
-        graph_file=root / "graph.json",
         schema_file=root / "SCHEMA.md",
-        state_file=root / ".auto_index_state.json",
-        report_dir=root / "dream-reports",
         env_file=env_file,
         # MCP
         mcp_host=_pick("mcp_host", "MCP_HOST", "0.0.0.0"),
@@ -174,11 +162,7 @@ def load_config(wiki_root: Optional[str] = None) -> WikiConfig:
         openviking_account=_pick("account", "OPENVIKING_ACCOUNT", ov.get("account", "hermes")),
         openviking_user=_pick("user", "OPENVIKING_USER", ov.get("user", "default")),
         openviking_bin=_env("OPENVIKING_BIN", ""),
-        # LLM
-        glm_base_url=_pick("base_url", "GLM_BASE_URL", llm.get("base_url", "https://open.bigmodel.cn/api/paas/v4")),
-        glm_api_key=_pick("api_key", "GLM_API_KEY", llm.get("api_key", "")),
-        dream_cycle_model=_pick("dream_cycle_model", "DREAM_CYCLE_MODEL", llm.get("dream_cycle_model", "glm-4-flash")),
-        memory_to_wiki_model=_pick("memory_to_wiki_model", "MEMORY_TO_WIKI_MODEL", llm.get("memory_to_wiki_model", "glm-4-flash")),
+        # LLM config removed in v4
         # Notion
         notion_api_key=_pick("api_key", "NOTION_API_KEY", notion.get("api_key", "")),
         webdav_base_url=_pick("webdav_base_url", "WEBDAV_BASE_URL", notion.get("webdav_base_url", "")),
