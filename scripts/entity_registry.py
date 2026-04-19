@@ -656,7 +656,8 @@ def scan_wiki_pages(wiki_root: str = None) -> dict:
     reg = load_registry()
     
     # 收集所有 md 文件
-    md_files = list(wiki_path.rglob("*.md"))
+    EXCLUDED = {"archived-books", "logs", "dream-reports", "scripts", "raw", "__pycache__", "src", "system"}
+    md_files = [f for f in wiki_path.rglob("*.md") if not any(p in EXCLUDED for p in f.relative_to(wiki_path).parts)]
     
     for md_file in md_files:
         try:

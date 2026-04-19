@@ -22,7 +22,7 @@ STALE_THRESHOLD_DAYS = 30
 WEEK_OLD_THRESHOLD = 7  # days
 
 # Exclude patterns
-EXCLUDE_DIRS = {"scripts", "logs", ".git", "src", "templates"}
+EXCLUDE_DIRS = {"scripts", "logs", ".git", "src", "templates", "archived-books"}
 EXCLUDE_FILES = {"dream-*.md"}
 
 # Frontmatter regex

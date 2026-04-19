@@ -97,7 +97,7 @@ except ImportError as e:
 # 扫描时排除的目录（系统产物、原始文件，非 wiki 内容）
 _EXCLUDE_DIRS = {'dream-reports', 'raw', 'src', 'logs', 'scripts', '.git',
                  'assets', 'papers', 'transcripts', 'articles',
-                 'images', 'pdfs', 'videos', 'audio'}
+                 'images', 'pdfs', 'videos', 'audio', 'system', 'tests', 'archived-books'}
 
 # Rejection feedback storage
 _FEEDBACK_FILE = WIKI_ROOT / ".wiki_feedback.json"

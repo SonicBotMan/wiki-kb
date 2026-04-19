@@ -1,16 +1,20 @@
 #!/bin/bash
 # wiki-cron-wrapper.sh - Cron wrapper with Telegram notification on failure
-# Usage: ./wiki-cron-wrapper.sh '<command>' '<job_name>'
+# Usage: ./wiki-cron-wrapper.sh '<script> [args...]' '<job_name>'
 
 set -euo pipefail
 
-COMMAND="${1:-}"
+COMMAND="$1"
 JOB_NAME="${2:-}"
 
 if [[ -z "$COMMAND" || -z "$JOB_NAME" ]]; then
-    echo "Usage: $0 '<command>' '<job_name>'" >&2
+    echo "Usage: $0 '<script> [args...]' '<job_name>'" >&2
     exit 1
 fi
+
+# Split command into script name and arguments
+SCRIPT_NAME=$(echo "$COMMAND" | awk '{print $1}')
+SCRIPT_ARGS=$(echo "$COMMAND" | awk '{$1=""; print substr($0,2)}')
 
 LOCK_FILE="/tmp/wiki-cron-wrapper.lock"
 TIMEOUT_SECONDS=300
@@ -48,7 +52,11 @@ send_telegram() {
 echo "$(date '+%Y-%m-%d %H:%M:%S') [${JOB_NAME}] STARTED" >> "$LOG_FILE"
 
 set +e
-timeout "$TIMEOUT_SECONDS" docker exec "$CONTAINER" python3 "/app/scripts/${COMMAND}" 2>&1 | tee -a "$LOG_FILE"
+if [[ -n "$SCRIPT_ARGS" ]]; then
+    timeout "$TIMEOUT_SECONDS" docker exec "$CONTAINER" python3 "/app/scripts/${SCRIPT_NAME}" $SCRIPT_ARGS 2>&1 | tee -a "$LOG_FILE"
+else
+    timeout "$TIMEOUT_SECONDS" docker exec "$CONTAINER" python3 "/app/scripts/${SCRIPT_NAME}" 2>&1 | tee -a "$LOG_FILE"
+fi
 EXIT_CODE=${PIPESTATUS[0]}
 set -e
 
